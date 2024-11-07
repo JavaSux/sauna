@@ -1,6 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "BinauralEffect.h"
 
 class SaunaAudioProcessor : public juce::AudioProcessor {
 public:
@@ -11,14 +12,12 @@ public:
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
 
-    #ifndef JucePlugin_PreferredChannelConfigurations
     bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
-    #endif
 
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
     
-    juce::AudioProcessorEditor* createEditor() override;
+    juce::AudioProcessorEditor *createEditor() override;
     bool hasEditor() const override;
 
     
@@ -48,6 +47,15 @@ public:
         createStateParameterLayout(),
     };
 
+    std::string debugMessage{};
+
 private:
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SaunaAudioProcessor)
+    IPLContext steam_audio_context{};
+    std::optional<BinauralEffect> binaural{};
+
+    // Make non-copyable
+    SaunaAudioProcessor(const SaunaAudioProcessor&) = delete;
+    SaunaAudioProcessor& operator= (const SaunaAudioProcessor&) = delete;
+
+    JUCE_LEAK_DETECTOR(SaunaAudioProcessor)
 };

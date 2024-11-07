@@ -16,5 +16,9 @@ private:
     // access the processor object that created it.
     SaunaAudioProcessor& audioProcessor;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SaunaAudioProcessorEditor)
+    // Make non-copyable
+    SaunaAudioProcessorEditor(const SaunaAudioProcessorEditor&) = delete;
+    SaunaAudioProcessorEditor& operator=(SaunaAudioProcessorEditor const &) = delete;
+
+    JUCE_LEAK_DETECTOR(SaunaAudioProcessorEditor)
 };
