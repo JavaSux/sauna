@@ -1,27 +1,26 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "BinauralEffect.h"
+#include "Spatializer.h"
 
-class SaunaAudioProcessor : public juce::AudioProcessor {
-public:
-    SaunaAudioProcessor();
-    ~SaunaAudioProcessor() override;
+struct SaunaProcessor : juce::AudioProcessor {
+    SaunaProcessor();
+    ~SaunaProcessor() override;
 
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
 
-    bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
+    bool isBusesLayoutSupported(BusesLayout const&layouts) const override;
 
-    void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
     
     juce::AudioProcessorEditor *createEditor() override;
     bool hasEditor() const override;
 
     
-    const juce::String getName() const override;
+    juce::String const getName() const override;
 
     bool acceptsMidi() const override;
     bool producesMidi() const override;
@@ -32,12 +31,12 @@ public:
     int getNumPrograms() override;
     int getCurrentProgram() override;
     void setCurrentProgram (int index) override;
-    const juce::String getProgramName (int index) override;
-    void changeProgramName (int index, const juce::String& newName) override;
+    juce::String const getProgramName (int index) override;
+    void changeProgramName (int index, const juce::String &newName) override;
 
     
-    void getStateInformation (juce::MemoryBlock& destData) override;
-    void setStateInformation (const void* data, int sizeInBytes) override;
+    void getStateInformation(juce::MemoryBlock& destData) override;
+    void setStateInformation(const void *data, int sizeInBytes) override;
     
     static juce::AudioProcessorValueTreeState::ParameterLayout createStateParameterLayout();
     juce::AudioProcessorValueTreeState pluginState {
@@ -51,11 +50,11 @@ public:
 
 private:
     IPLContext steam_audio_context{};
-    std::optional<BinauralEffect> binaural{};
+    std::optional<Spatializer> spatializer{};
 
     // Make non-copyable
-    SaunaAudioProcessor(const SaunaAudioProcessor&) = delete;
-    SaunaAudioProcessor& operator= (const SaunaAudioProcessor&) = delete;
+    SaunaProcessor(SaunaProcessor const &) = delete;
+    SaunaProcessor& operator= (SaunaProcessor const &) = delete;
 
-    JUCE_LEAK_DETECTOR(SaunaAudioProcessor)
+    JUCE_LEAK_DETECTOR(SaunaProcessor)
 };

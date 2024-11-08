@@ -1,7 +1,7 @@
-#include "PluginProcessor.h"
-#include "PluginEditor.h"
+#include "SaunaProcessor.h"
+#include "SaunaEditor.h"
 
-SaunaAudioProcessorEditor::SaunaAudioProcessorEditor(SaunaAudioProcessor& p) :
+SaunaEditor::SaunaEditor(SaunaProcessor& p) :
     AudioProcessorEditor(&p),
     audioProcessor(p)
 {
@@ -10,10 +10,10 @@ SaunaAudioProcessorEditor::SaunaAudioProcessorEditor(SaunaAudioProcessor& p) :
     setSize (400, 400);
 }
 
-SaunaAudioProcessorEditor::~SaunaAudioProcessorEditor() {}
+SaunaEditor::~SaunaEditor() {}
 
 
-void SaunaAudioProcessorEditor::paint(juce::Graphics& g) {
+void SaunaEditor::paint(juce::Graphics& g) {
     // (Our component is opaque, so we must completely fill the background with a solid colour)
     g.fillAll(getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
 
@@ -22,7 +22,7 @@ void SaunaAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawFittedText(audioProcessor.debugMessage, getLocalBounds(), juce::Justification::centred, 1);
 }
 
-void SaunaAudioProcessorEditor::resized() {
+void SaunaEditor::resized() {
     // This is generally where you'll want to lay out the positions of any
     // subcomponents in your editor
 }
