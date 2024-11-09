@@ -18,8 +18,8 @@ enum struct SaunaMode {
 };
 
 struct SaunaControls {
-	SaunaControls(juce::AudioProcessor &);
 	SaunaControls() = delete;
+	SaunaControls(juce::AudioProcessor &);
 	SaunaControls(SaunaControls const &) = delete;
 	~SaunaControls() = default;
 
@@ -30,6 +30,7 @@ private:
 	// Global params
 	juce::AudioParameterChoice *mode;
 	juce::AudioParameterFloat *speed;
+	juce::AudioParameterFloat *phase;
 	juce::AudioParameterBool *tempoSync;
 	juce::AudioParameterFloat *minDistance;
 
@@ -47,4 +48,7 @@ private:
 	// Path params
 	std::vector<PathNode> nodes{};
 	unsigned int currentNode{};
+
+	
+	Vec3 orbit(float time) const;
 };

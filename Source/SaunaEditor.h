@@ -13,11 +13,11 @@ struct SaunaEditor: juce::AudioProcessorEditor {
 private:
     // This reference is provided as a quick way for your editor to
     // access the processor object that created it.
-    SaunaProcessor& audioProcessor;
+    SaunaProcessor & audioProcessor;
 
     // Make non-copyable
     SaunaEditor(const SaunaEditor&) = delete;
-    SaunaEditor& operator=(SaunaEditor const &) = delete;
+    SaunaEditor & operator=(SaunaEditor const &) = delete;
 
     JUCE_LEAK_DETECTOR(SaunaEditor)
 };

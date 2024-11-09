@@ -8,7 +8,7 @@ struct SaunaProcessor: juce::AudioProcessor {
     SaunaProcessor();
     ~SaunaProcessor() override;
     SaunaProcessor(SaunaProcessor const &) = delete;
-    SaunaProcessor& operator= (SaunaProcessor const &) = delete;
+    SaunaProcessor & operator= (SaunaProcessor const &) = delete;
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;

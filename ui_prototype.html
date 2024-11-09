@@ -58,12 +58,17 @@
         <!--plugin style-->
         <style>
             :root {
+                --plugin-fg: hsl(0, 0%, 80%);
                 --accent: hsl(40, 100%, 35%);
                 --plugin-bg: hsl(0, 0%, 28%);
-                --viewport-bg: linear-gradient(hsl(234, 6%, 33%), hsl(0 0% 10%));
+                --viewport-bg: linear-gradient(hsl(240, 5%, 23%), hsl(0 0% 8%));
+                --global-bg: linear-gradient(hsl(233, 53%, 50%), hsl(234, 46%, 31%));
+                --mode-bg: linear-gradient(hsl(233, 5%, 40%), hsl(0 0% 25%));
+                --section-radius: 3px;
                 --viewport-border: 2px solid var(--accent);
                 --viewport-margin: 16px;
-                --viewport-shadow: 0 1px 3px 1px rgba(0, 0, 0, 0.6);
+                --section-margin: 8px;
+                --section-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
                 --control-panel-shadow: rgba(0, 0, 0, 0.8);
                 --control-panel-bg: hsl(0, 0%, 15%);
             }
@@ -72,49 +77,92 @@
                 flex-direction: column;
                 width: 100%;
                 height: 100%;
-            }
-            .display {
-                height: calc(100% - 120px);
-                background-color: var(--plugin-bg);
-                box-shadow: 0 0 10px var(--control-panel-shadow);
-                z-index: 10;
-            }
-            .viewport {
-                height: calc(100% - var(--viewport-margin) * 2);
-                margin: 16px;
-                border-radius: 3px;
-                outline: var(--viewport-border);
-                background: var(--viewport-bg);
-                box-shadow: var(--viewport-shadow);
-                overflow: hidden;
-            }
-            .vp-info {
-                color: var(--accent);
-                font-weight: bold;
-                font-size: 0.7rem;
-                margin: 0.5em;
-            }
-            .scene-3d {
-                width: 100%;
-                height: 90%;
-                display: flex;
-                justify-content: center;
-            }
-            #grid {
-                display: block;
-                position: relative;
-                width: 60%;
-                max-height: 150%;
-                filter: invert(0.5) sepia(1) saturate(200%);
-                transform: perspective(10cm) rotateX(60deg);
-                opacity: 50%;
-            }
-            .control-panel {
-                height: 120px;
-                background: var(--control-panel-bg);
-                border-top: 1px solid rgba(255 255 255 0.2);
-                position: relative;
-                bottom: 0;
+                font-family: "Courier New";
+
+                .display {
+                    height: calc(100% - 120px);
+                    background-color: var(--plugin-bg);
+                    box-shadow: 0 0 10px var(--control-panel-shadow);
+                    z-index: 10;
+
+                    .viewport {
+                        height: calc(100% - var(--viewport-margin) * 2);
+                        margin: 16px;
+                        border-radius: var(--section-radius);
+                        border: var(--viewport-border);
+                        background: var(--viewport-bg);
+                        box-shadow: var(--section-shadow);
+                        overflow: hidden;
+
+                        .vp-info {
+                            color: var(--accent);
+                            font-weight: bold;
+                            font-size: 0.7rem;
+                            margin: var(--section-margin);
+                        }
+
+                        .scene-3d {
+                            width: 100%;
+                            height: 90%;
+                            display: flex;
+                            justify-content: center;
+
+                            #grid {
+                                display: block;
+                                position: relative;
+                                width: 60%;
+                                max-height: 150%;
+                                filter: invert(0.5) sepia(1) saturate(200%);
+                                transform: perspective(10cm) rotateX(60deg);
+                                opacity: 50%;
+                            }
+                        }
+                    }
+                }
+                .control-panel {
+                    color: var(--plugin-fg);
+                    display: flex;
+                    height: calc(120px - var(--section-margin) * 2);
+                    background: var(--control-panel-bg);
+                    border-top: 1px solid rgba(255 255 255 0.2);
+                    position: relative;
+                    bottom: 0;
+                    padding: var(--section-margin);
+
+                    section {
+                        height: calc(100% - var(--section-margin) * 2);
+                        padding: var(--section-margin);
+                        border-top: 1px solid hsl(0 0% 50%);
+                        border-bottom: 1px solid hsl(0 0% 5%);
+                        border-radius: var(--section-radius);
+                        box-shadow: var(--section-shadow);
+                        font-size: 10pt;
+
+                        input[type=range] {
+                            height: 16px;
+                            width: 100px;
+                        }
+
+                        &.global-options {
+                            background: var(--global-bg);
+                            width: 190px;
+                            margin-right: var(--section-margin);
+                        }
+
+                        &.mode-options {
+                            background: var(--mode-bg);
+                            flex-grow: 1;
+                        }
+
+                        table {
+                            border-spacing: 0;
+                            border-collapse: collapse;
+                        }
+                        td {
+                            padding: 0;
+                        }
+                    }
+                }
             }
         </style>
     </head>
@@ -143,6 +191,33 @@
                         </div>
                     </div>
                     <div class="control-panel">
+                        <section class="global-options">
+                            <table>
+                                <tr>
+                                    <td><label for="speed">Speed</label></td>
+                                    <td><input name=speed type=range></td>
+                                </tr>
+                                <tr>
+                                    <td><label for="phase">Phase</label></td>
+                                    <td><input name=phase type=range></td>
+                                </tr>
+                                <tr>
+                                    <td><label for="minDistance">Min. Dist.</label></td>
+                                    <td><input name=minDistance type=range></td>
+                                </tr>
+                                <tr>
+                                    <td><label for="tempoSync">Tempo Sync</label></td>
+                                    <td><input name=tempoSync type="checkbox"></td>
+                                </tr>
+                            </table>
+                        </section>
+                        <section class="mode-options">
+                            <select>
+                                <option>Static</option>
+                                <option>Orbit</option>
+                                <option>Path</option>
+                            </select>
+                        </section>
                     </div>
                 </div>
             </div>

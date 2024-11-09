@@ -85,7 +85,9 @@ void DirectEffect::setParams(IPLContext context, Vec3 position, float minDistanc
     }
 
     if (changed) {
-        auto newPosition = position.toSteam();
+        prevPosition = position;
+        IPLVector3 newPosition = position.toSteam();
+
         params.distanceAttenuation = iplDistanceAttenuationCalculate(
             context, 
             newPosition, 
@@ -93,12 +95,12 @@ void DirectEffect::setParams(IPLContext context, Vec3 position, float minDistanc
             &attenuation
         );
         iplAirAbsorptionCalculate(
-            context, newPosition, 
+            context,
+            newPosition, 
             LISTENER_POSITION.toSteam(), 
             &airAbsorption, 
             params.airAbsorption
         );
-        prevPosition = position;
     }
 }
 

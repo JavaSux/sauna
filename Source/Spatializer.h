@@ -5,7 +5,8 @@
 #include "util.h"
 
 const Vec3 DEFAULT_SOURCE_POSITION{ 0.0f, 0.5f, 0.0f }; // Straight ahead
-const Vec3 LISTENER_POSITION{}; // origin
+const Vec3 DEFAULT_ORBIT_AXIS{ Vec3::up() };
+const Vec3 LISTENER_POSITION{ Vec3::origin() };
 
 struct BinauralEffect {
     BinauralEffect(IPLContext context, IPLAudioSettings *audioSettings);
