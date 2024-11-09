@@ -1,73 +1,142 @@
-#include <string_view>
 #include "Spatializer.h"
 
-Spatializer::Spatializer(
-    IPLContext context,
-    int samplingRate,
-    int frameSize
-) :
-    context{ context }
+// Implementation for BinauralEffect
+BinauralEffect::BinauralEffect(IPLContext context, IPLAudioSettings *audioSettings) :
+    hrtf{}, effect{}
 {
-    // Init output buffer
-    output = {};
-    IPLAudioSettings audioSettings{ samplingRate, frameSize };
-    steam_assert(
-        iplAudioBufferAllocate(context, 2, frameSize, &output),
-        "Failed to allocate output buffer"
-    );
-
-    // Init HRTF
     IPLHRTFSettings hrtfSettings{
-        .type = IPL_HRTFTYPE_DEFAULT,
-        .volume = 1.0f
+        .type = IPL_HRTFTYPE_DEFAULT, // built-in HRTF
+        .volume = 1.0f, // 100% volume
+        .normType = IPL_HRTFNORMTYPE_RMS // do normalize volume
     };
 
-    hrtf = {};
     steam_assert(
-        iplHRTFCreate(context, &audioSettings, &hrtfSettings, &hrtf),
+        iplHRTFCreate(context, audioSettings, &hrtfSettings, &hrtf),
         "Failed to create HRTF"
     );
 
-    // Init effect
-    IPLBinauralEffectSettings effectSettings{
-        .hrtf = hrtf,
+    IPLBinauralEffectSettings binauralSettings{
+        .hrtf = hrtf
     };
 
-    effect = {};
     steam_assert(
-        iplBinauralEffectCreate(context, &audioSettings, &effectSettings, &effect),
+        iplBinauralEffectCreate(context, audioSettings, &binauralSettings, &effect),
         "Failed to create Binaural Effect"
     );
 
-    // Init default effect params
     params = {
-        .direction = IPLVector3{ 0.0f, 0.0f, -1.0f },
-        .interpolation = IPL_HRTFINTERPOLATION_BILINEAR,
-        .spatialBlend = 1.0f,
-        .hrtf = hrtf,
-        .peakDelays = nullptr
+        .direction = DEFAULT_SOURCE_POSITION.toSteam(),
+        .interpolation = IPL_HRTFINTERPOLATION_BILINEAR, // HQ interpolation
+        .spatialBlend = 1.0f, // 100% wet signal
+        .hrtf = hrtf
     };
 }
 
-Spatializer::~Spatializer() {
-    // Free output buffer
-    iplAudioBufferFree(context, &output);
-    // Release effect
+BinauralEffect::~BinauralEffect() {
     iplBinauralEffectRelease(&effect);
-    // Release HRTF
     iplHRTFRelease(&hrtf);
 }
 
-void Spatializer::setDirection(IPLVector3 direction) {
-    params.direction = direction;
+void BinauralEffect::setParams(Vec3 direction) {
+    params.direction = (direction.hasDirection() ? direction : DEFAULT_SOURCE_POSITION).toSteam();
 }
 
-void Spatializer::apply(juce::AudioBuffer<float> &buffer, int input_channel_count) {
-    if (buffer.getNumChannels() != 2)
+void BinauralEffect::processBlock(IPLAudioBuffer &input, IPLAudioBuffer &output) {
+    iplBinauralEffectApply(effect, &params, &input, &output);
+}
+
+
+// Implementation for DirectEffect
+DirectEffect::DirectEffect(IPLContext context, IPLAudioSettings *audioSettings) :
+    effect{},
+    attenuation{
+        .type = IPL_DISTANCEATTENUATIONTYPE_INVERSEDISTANCE,
+        .minDistance = 0.2f, // 100% volume at 20cm
+    },
+    airAbsorption{
+        .type = IPL_AIRABSORPTIONTYPE_DEFAULT,
+    },
+    params{
+        .flags = static_cast<IPLDirectEffectFlags>(IPL_DIRECTEFFECTFLAGS_APPLYDISTANCEATTENUATION | IPL_DIRECTEFFECTFLAGS_APPLYAIRABSORPTION),
+    }
+{
+    IPLDirectEffectSettings directSettings{
+        .numChannels = 2
+    };
+    steam_assert(
+        iplDirectEffectCreate(context, audioSettings, &directSettings, &effect),
+        "Failed to create Direct Effect"
+    );
+
+    setParams(context, DEFAULT_SOURCE_POSITION, 0.2f);
+}
+
+DirectEffect::~DirectEffect() {
+    iplDirectEffectRelease(&effect);
+}
+
+// Set params and recalculate attenuation if they changed
+void DirectEffect::setParams(IPLContext context, Vec3 position, float minDistance) {
+    bool changed{ position != prevPosition };
+
+    if (minDistance != attenuation.minDistance) {
+        attenuation.minDistance = minDistance;
+        changed = true;
+    }
+
+    if (changed) {
+        auto newPosition = position.toSteam();
+        params.distanceAttenuation = iplDistanceAttenuationCalculate(
+            context, 
+            newPosition, 
+            LISTENER_POSITION.toSteam(),
+            &attenuation
+        );
+        iplAirAbsorptionCalculate(
+            context, newPosition, 
+            LISTENER_POSITION.toSteam(), 
+            &airAbsorption, 
+            params.airAbsorption
+        );
+        prevPosition = position;
+    }
+}
+
+void DirectEffect::processBlock(IPLAudioBuffer buffer) {
+    iplDirectEffectApply(effect, &params, &buffer, &buffer);
+}
+
+
+// Implementation for Spatializer
+Spatializer::Spatializer(IPLContext context, IPLAudioSettings *audioSettings) :
+    context{ context },
+    binaural{ context, audioSettings },
+    direct{ context, audioSettings },
+    output{}
+{
+    steam_assert(
+        iplAudioBufferAllocate(context, 2, audioSettings->frameSize, &output),
+        "Failed to allocate output buffer"
+    );
+}
+
+Spatializer::~Spatializer() {
+    iplAudioBufferFree(context, &output);
+}
+
+Spatializer &Spatializer::setParams(Vec3 position, float minDistance) {
+    binaural.setParams(position);
+    direct.setParams(context, position, minDistance);
+    return *this;
+}
+
+Spatializer &Spatializer::processBlock(juce::AudioBuffer<float> &buffer, int input_channel_count) {
+    if (buffer.getNumChannels() != 2) {
         throw new std::runtime_error(std::format(
             "Effect requires exactly 2 channels, but was given {}",
             buffer.getNumChannels()
         ));
+    }
 
     IPLAudioBuffer input {
         .numChannels = std::min(input_channel_count, 2),
@@ -76,10 +145,13 @@ void Spatializer::apply(juce::AudioBuffer<float> &buffer, int input_channel_coun
         .data = const_cast<float**>(buffer.getArrayOfReadPointers())
     };
 
-    iplBinauralEffectApply(effect, &params, &input, &output);
+    binaural.processBlock(input, output);
+    direct.processBlock(output);
 
-    // Copy output back to buffer
+    // Copy output to buffer
     size_t buffer_size = input.numSamples * sizeof(float);
     std::memcpy(buffer.getWritePointer(0), output.data[0], buffer_size);
     std::memcpy(buffer.getWritePointer(1), output.data[1], buffer_size);
+
+    return *this;
 }

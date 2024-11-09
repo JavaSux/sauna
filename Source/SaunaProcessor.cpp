@@ -2,20 +2,36 @@
 #include "SaunaEditor.h"
 #include <format>
 
+static juce::AudioProcessorValueTreeState::ParameterLayout buildLayout() {
+    auto layout = juce::AudioProcessorValueTreeState::ParameterLayout{};
+
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        "StaticPosition", "Example param",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.1f),
+        0.0f
+    ));
+
+    return layout;
+}
+
 SaunaProcessor::SaunaProcessor() :
     AudioProcessor{
         BusesProperties{}
-            .withInput("Input", juce::AudioChannelSet::stereo(), true)
+            .withInput ("Input",  juce::AudioChannelSet::stereo(), true)
             .withOutput("Output", juce::AudioChannelSet::stereo(), true)
-    }
+    },
+    pluginState{ *this }
 {
-    IPLContextSettings contextSettings{};
-    contextSettings.version = STEAMAUDIO_VERSION;
+    IPLContextSettings contextSettings{
+        .version = STEAMAUDIO_VERSION,
+    };
 
     steam_assert(
         iplContextCreate(&contextSettings, &steam_audio_context),
         "Failed to initialize Steam Audio context"
     );
+
+    juce::Logger::outputDebugString("Test");
 }
 
 SaunaProcessor::~SaunaProcessor() {
@@ -39,13 +55,17 @@ int SaunaProcessor::getNumPrograms() {
 }
 
 int SaunaProcessor::getCurrentProgram() { return 0; }
-void SaunaProcessor::setCurrentProgram(int index) {}
-juce::String const SaunaProcessor::getProgramName(int index) { return {}; }
-void SaunaProcessor::changeProgramName(int index, juce::String const &newName) {}
+void SaunaProcessor::setCurrentProgram(int) {}
+juce::String const SaunaProcessor::getProgramName(int) { return {}; }
+void SaunaProcessor::changeProgramName(int, juce::String const &) {}
 
 
 void SaunaProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
-    spatializer.emplace(steam_audio_context, (int) sampleRate, samplesPerBlock);
+    IPLAudioSettings audioSettings{
+        .samplingRate = static_cast<int>(sampleRate),
+        .frameSize = samplesPerBlock,
+    };
+    spatializer.emplace(steam_audio_context, &audioSettings);
 }
 
 void SaunaProcessor::releaseResources() {
@@ -63,28 +83,20 @@ bool SaunaProcessor::isBusesLayoutSupported(BusesLayout const &layouts) const {
     return true;
 }
 
-void SaunaProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::MidiBuffer& midiMessages) {
+void SaunaProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::MidiBuffer &) {
     juce::ScopedNoDenormals noDenormals;
-    Spatializer &effect = spatializer.value();
-
-    auto position = playHead.load()->getPosition();
-    float time = position.hasValue() ? position.operator*().getTimeInSeconds().orFallback(0.0) : 0.0;
-
-    effect.setDirection(IPLVector3{
-        (float) std::sin(time * 2.0) * 2.0f,
-        (float) std::cos(time * 2.0) * 2.0f,
-        0.0
-    });
 
     try {
-        auto time = std::chrono::system_clock::now();
-        effect.apply(buffer, getMainBusNumInputChannels());
-        debugMessage = std::format(
-            "{}us",
-            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - time).count()
-        );
+        auto playheadPosition = playHead.load()->getPosition();
+        double time = playheadPosition.hasValue() ? playheadPosition->getTimeInSeconds().orFallback(0.0) : 0.0;
+
+        auto position = pluginState.getPositionFor(static_cast<float>(time));
+
+        spatializer.value()
+            .setParams(position, pluginState.getMinDistance())
+            .processBlock(buffer, getMainBusNumInputChannels());
     } catch (std::exception e) {
-        debugMessage = e.what();
+        DBG(e.what());
     }
 }
 
@@ -92,33 +104,21 @@ void SaunaProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::MidiBu
 bool SaunaProcessor::hasEditor() const { return true; }
 
 juce::AudioProcessorEditor* SaunaProcessor::createEditor() {
-    return new SaunaEditor{ *this };
+    // return new SaunaEditor{ *this };
+    return new juce::GenericAudioProcessorEditor(*this);
 }
 
 
-void SaunaProcessor::getStateInformation(juce::MemoryBlock &destData) {
+void SaunaProcessor::getStateInformation(juce::MemoryBlock &) {
     // You should use this method to store your parameters in the memory block.
     // You could do that either as raw data, or use the XML or ValueTree classes
     // as intermediaries to make it easy to save and load complex data.
 }
 
-void SaunaProcessor::setStateInformation(void const *data, int sizeInBytes) {
+void SaunaProcessor::setStateInformation(void const *, int) {
     // You should use this method to restore your parameters from this memory block,
     // whose contents will have been created by the getStateInformation() call.
 }
-
-juce::AudioProcessorValueTreeState::ParameterLayout SaunaProcessor::createStateParameterLayout() {
-    auto layout = juce::AudioProcessorValueTreeState::ParameterLayout{};
-
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        "ExampleParam", "Example param",
-        juce::NormalisableRange<float>(0.0f, 1.0f, 0.1f),
-        0.0
-    ));
-
-    return layout;
-}
-
 
 juce::AudioProcessor *JUCE_CALLTYPE createPluginFilter() {
     return new SaunaProcessor();

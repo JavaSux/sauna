@@ -1,0 +1,50 @@
+#pragma once
+
+#include <JuceHeader.h>
+#include <phonon.h>
+#include "util.h"
+
+struct PathNode {
+	juce::Vector3D<float> position;
+	// Easing nextEase;
+	// Interpolation nextPath;
+	float nextDuration;
+};
+
+enum struct SaunaMode {
+	Static,
+	Orbit,
+	Path,
+};
+
+struct SaunaControls {
+	SaunaControls(juce::AudioProcessor &);
+	SaunaControls() = delete;
+	SaunaControls(SaunaControls const &) = delete;
+	~SaunaControls() = default;
+
+	Vec3 getPositionFor(float time) const;
+	float getMinDistance() const;
+
+private:
+	// Global params
+	juce::AudioParameterChoice *mode;
+	juce::AudioParameterFloat *speed;
+	juce::AudioParameterBool *tempoSync;
+	juce::AudioParameterFloat *minDistance;
+
+	// Static params
+	std::array<juce::AudioParameterFloat *, 3> staticPosition;
+
+	// Orbit params
+	std::array<juce::AudioParameterFloat *, 3> orbitCenter;
+	std::array<juce::AudioParameterFloat *, 3> orbitAxis;
+
+	juce::AudioParameterFloat *orbitRadius;
+	juce::AudioParameterFloat *orbitStretch;
+	juce::AudioParameterFloat *orbitRotation;
+
+	// Path params
+	std::vector<PathNode> nodes{};
+	unsigned int currentNode{};
+};

@@ -7,7 +7,7 @@ SaunaEditor::SaunaEditor(SaunaProcessor& p) :
 {
     // Make sure that before the constructor has finished, you've set the
     // editor's size to whatever you need it to be.
-    setSize (400, 400);
+    setSize(400, 400);
 }
 
 SaunaEditor::~SaunaEditor() {}
@@ -19,7 +19,7 @@ void SaunaEditor::paint(juce::Graphics& g) {
 
     g.setColour(juce::Colours::white);
     g.setFont(juce::FontOptions (15.0f));
-    g.drawFittedText(audioProcessor.debugMessage, getLocalBounds(), juce::Justification::centred, 1);
+    g.drawFittedText("hello world", getLocalBounds(), juce::Justification::centred, 1);
 }
 
 void SaunaEditor::resized() {

@@ -3,7 +3,7 @@
 #include <JuceHeader.h>
 #include "SaunaProcessor.h"
 
-struct SaunaEditor : juce::AudioProcessorEditor {
+struct SaunaEditor: juce::AudioProcessorEditor {
     SaunaEditor(SaunaProcessor&);
     ~SaunaEditor() override;
 
