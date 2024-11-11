@@ -8,7 +8,7 @@
 
 using std::numbers::pi;
 
-static const char const *DIRECTION_NAMES[3]{ "Right", "Forward", "Up" };
+static const std::array<char const *, 3> DIRECTION_NAMES{ "Right", "Forward", "Up" };
 
 static std::array<juce::AudioParameterFloat *, 3> vectorParam(
 	std::function<juce::AudioParameterFloat *(int, char)> &&constructor
@@ -50,6 +50,7 @@ SaunaControls::SaunaControls(juce::AudioProcessor &processor) :
 	orbitRotation{ new juce::AudioParameterFloat("orbitRotation", "Orbit stretch rotation", float{ -pi }, float{ pi }, 0.0f) }
 {
 	processor.addParameter(speed);
+	processor.addParameter(phase);
 	processor.addParameter(tempoSync);
 	processor.addParameter(minDistance);
 	processor.addParameter(mode);
@@ -75,7 +76,7 @@ Vec3 SaunaControls::getPositionFor(float time) const {
 		return Vec3{};
 
 	default:
-		throw new std::runtime_error(std::format("Undefined mode {}", index));
+		throw std::runtime_error{ std::format("Undefined mode {}", index) };
 	}
 }
 
@@ -96,10 +97,10 @@ Vec3 SaunaControls::orbit(float time) const {
 	} else if (axis == Vec3::down()) {
 		point.x *= -1.0f;
 	} else {
-		float angle = std::acos(Vec3::up().dot(axis));
-		Vec3 axis = Vec3::up().cross(axis).normalized();
-		
-		point = point.axisAngleRotate(axis, angle);
+		point = point.axisAngleRotate(
+			Vec3::up().cross(axis).normalized(), 
+			std::acos(Vec3::up().dot(axis))
+		);
 	}
 
 	return point + Vec3{ orbitCenter };

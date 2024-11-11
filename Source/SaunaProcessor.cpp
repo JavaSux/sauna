@@ -104,8 +104,7 @@ void SaunaProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::MidiBu
 bool SaunaProcessor::hasEditor() const { return true; }
 
 juce::AudioProcessorEditor* SaunaProcessor::createEditor() {
-    // return new SaunaEditor{ *this };
-    return new juce::GenericAudioProcessorEditor(*this);
+    return new SaunaEditor{ *this };
 }
 
 

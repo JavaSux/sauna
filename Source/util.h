@@ -114,7 +114,7 @@ struct Vec3 {
         case 0: return x;
         case 1: return y;
         case 2: return z;
-        default: throw new std::out_of_range(std::format("No element {} on Vec3", i));
+        default: throw std::out_of_range{ std::format("No element {} on Vec3", i) };
         }
     }
 };
@@ -141,5 +141,17 @@ static void steam_assert(IPLerror status, std::string_view description) {
         break;
     }
 
-    throw new std::runtime_error(message);
+    throw std::runtime_error{ message };
+}
+
+static void opengl_assert() {
+    size_t count{ 0 };
+    while (GLenum err = juce::gl::glGetError()) {
+        DBG("OpenGL error: " << err);
+        count += 1;
+    }
+
+    if (count > 0) {
+        throw std::runtime_error{ std::format("OpenGL encountered {} errors", count) };
+    }
 }

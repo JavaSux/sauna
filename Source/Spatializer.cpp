@@ -134,10 +134,10 @@ Spatializer &Spatializer::setParams(Vec3 position, float minDistance) {
 
 Spatializer &Spatializer::processBlock(juce::AudioBuffer<float> &buffer, int input_channel_count) {
     if (buffer.getNumChannels() != 2) {
-        throw new std::runtime_error(std::format(
+        throw std::runtime_error{ std::format(
             "Effect requires exactly 2 channels, but was given {}",
             buffer.getNumChannels()
-        ));
+        ) };
     }
 
     IPLAudioBuffer input {
