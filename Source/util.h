@@ -155,3 +155,8 @@ static void opengl_assert() {
         throw std::runtime_error{ std::format("OpenGL encountered {} errors", count) };
     }
 }
+
+template<typename Data>
+static Data expEase(Data const &current, Data const &target, float easing, float delta) {
+    return target + (current - target) * std::exp(-easing * delta);
+}

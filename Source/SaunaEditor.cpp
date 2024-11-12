@@ -3,85 +3,7 @@
 
 #include <string_view>
 #include <stdint.h>
-
-static char const *const VERTEX_SHADER = R"(
-attribute vec3 position;
-attribute vec3 normal;
-attribute vec4 sourceColour;
-attribute vec2 textureCoordIn;
-
-uniform mat4 projectionMatrix;
-uniform mat4 viewMatrix;
-
-varying vec4 destinationColour;
-varying vec2 textureCoordOut;
-varying vec3 worldPosition;
-
-void main() {
-    destinationColour = sourceColour;
-    textureCoordOut = textureCoordIn;
-    worldPosition = position;
-    gl_Position = projectionMatrix * viewMatrix * vec4(position, 1.0);
-}
-)";
-
-static char const *const FRAGMENT_SHADER = R"(
-varying vec3 worldPosition;
-varying vec4 destinationColour;
-varying vec2 textureCoordOut;
-
-// Returns vec2(shadow, opacity) premultiplied
-vec2 lines(vec2 coords) {
-    float band = smoothstep(0.03, 0.02, abs(coords.x - 0.5));
-    float shadow = 2.0 * abs(coords.y - 0.5);
-    return vec2(sqrt(shadow) * band, band);
-}
-
-// Returns vec2(shadow, opacity) premultiplied
-vec2 dots(vec2 coords) {
-    float dist = length(coords - vec2(0.5));
-    float value = smoothstep(0.075, 0.065, dist);
-    return vec2(value, value);
-}
-
-float edgeFade(vec2 coords) {
-    float dist = 2.0 * length(coords - vec2(0.5));
-    return smoothstep(1.0, 0.0, dist);
-}
-
-// Premultiplied alpha over, dimming the under's value
-vec2 alphaOverDim(vec2 top, vec2 bot, float dim) {
-    float inverse = 1.0 - top.y;
-    float value = top.x + bot.x * inverse * dim;
-    float alpha = top.y + bot.y * inverse;
-    return vec2(value, alpha);
-}
-
-void main() {
-    vec2 pixelDensity = dFdy(worldPosition.xy);
-
-    vec2 tiles = fract(worldPosition.xy);
-    vec2 subtiles = fract(worldPosition.xy * 4.0 + 0.5);
-
-    vec2 bigDots = dots(tiles);
-    vec2 smallDots = dots(subtiles);
-
-    vec2 bigLines = max(lines(tiles), lines(tiles.yx));
-    vec2 smallLines = max(lines(subtiles), lines(subtiles.yx));
-
-    vec2 big = alphaOverDim(bigDots, bigLines, 0.5);
-    vec2 small = alphaOverDim(smallDots, smallLines, 0.5);
-
-    float smudge = smoothstep(0.06, 0.0, length(pixelDensity));
-    vec2 all = alphaOverDim(big, small, pow(smudge, 4) * 0.5);
-    
-    float edgeFade = edgeFade(textureCoordOut);
-
-    float opacity = destinationColour.a * all.x * all.y * edgeFade;
-
-    gl_FragColor = vec4(destinationColour.rgb, opacity);
-}
-)";
+#include "util.h"
 
 static void tryEmplaceUniform(
     std::optional<juce::OpenGLShaderProgram::Uniform> &location,
@@ -117,53 +39,28 @@ VertexAttributes::VertexAttributes(juce::OpenGLShaderProgram &shader) {
 }
 
 void VertexAttributes::enable() const {
-    if (position.has_value()) {
-        juce::gl::glVertexAttribPointer(
-            position->attributeID,
-            3,
-            juce::gl::GL_FLOAT,
-            juce::gl::GL_FALSE,
-            sizeof (Vertex),
-            nullptr
-        );
-        juce::gl::glEnableVertexAttribArray(position->attributeID);
-    }
+    size_t offset{ 0 };
 
-    if (normal.has_value()) {
-        juce::gl::glVertexAttribPointer(
-            normal->attributeID, 
-            3, 
-            juce::gl::GL_FLOAT, 
-            juce::gl::GL_FALSE, 
-            sizeof (Vertex), 
-            (GLvoid*) (sizeof (float) * 3)
-        );
-        juce::gl::glEnableVertexAttribArray(normal->attributeID);
-    }
+    auto vertexBuffer = [&](decltype(position) const &attrib, GLint size) {
+        if (attrib) {
+            juce::gl::glVertexAttribPointer(
+                attrib->attributeID,
+                size,
+                juce::gl::GL_FLOAT,
+                juce::gl::GL_FALSE,
+                sizeof(Vertex),
+                reinterpret_cast<GLvoid *>(sizeof(float) * offset)
+            );
+            juce::gl::glEnableVertexAttribArray(attrib->attributeID);
+        }
 
-    if (sourceColour.has_value()) {
-        juce::gl::glVertexAttribPointer(
-            sourceColour->attributeID, 
-            4, 
-            juce::gl::GL_FLOAT, 
-            juce::gl::GL_FALSE, 
-            sizeof (Vertex), 
-            (GLvoid*) (sizeof (float) * 6)
-        );
-        juce::gl::glEnableVertexAttribArray(sourceColour->attributeID);
-    }
+        offset += size;
+    };
 
-    if (textureCoordIn.has_value()) {
-        juce::gl::glVertexAttribPointer(
-            textureCoordIn->attributeID, 
-            2, 
-            juce::gl::GL_FLOAT, 
-            juce::gl::GL_FALSE, 
-            sizeof (Vertex), 
-            (GLvoid*) (sizeof (float) * 10)
-        );
-        juce::gl::glEnableVertexAttribArray(textureCoordIn->attributeID);
-    }
+    vertexBuffer(position, 3);
+    vertexBuffer(normal, 3);
+    vertexBuffer(sourceColour, 4);
+    vertexBuffer(textureCoordIn, 2);
 }
 
 void VertexAttributes::disable() const {
@@ -211,13 +108,14 @@ void Mesh::pushQuad(float size, std::array<float, 4> const &color) {
     bufferHandles.emplace_back(vertices, indices);
 }
 
+const juce::Point<float> ViewportRenderer::INITIAL_MOUSE{ 0.5f, 0.6f };
 
 ViewportRenderer::ViewportRenderer() :
     juce::OpenGLAppComponent{},
-    shaderProgram{openGLContext}
-{
-    setOpaque(true);
-}
+    shaderProgram{openGLContext},
+    lastUpdateTime{ juce::Time::getCurrentTime() },
+    vBlankTimer{ this, [this] { update(); } }
+{}
 
 ViewportRenderer::~ViewportRenderer() {
     shutdownOpenGL();
@@ -229,10 +127,10 @@ void ViewportRenderer::initialise() {
     shaderProgram.release();
 
     if (
-        !shaderProgram.addVertexShader(juce::OpenGLHelpers::translateVertexShaderToV3(VERTEX_SHADER))
-        || !shaderProgram.addFragmentShader(juce::OpenGLHelpers::translateFragmentShaderToV3(FRAGMENT_SHADER))
+        !shaderProgram.addVertexShader(juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::standard_vert_glsl))
+        || !shaderProgram.addFragmentShader(juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::gridfloor_frag_glsl))
         || !shaderProgram.link()
-        ) {
+    ) {
         throw std::runtime_error{ shaderProgram.getLastError().toStdString() };
     }
 
@@ -244,6 +142,16 @@ void ViewportRenderer::initialise() {
     vertexAttributes.emplace(shaderProgram);
     tryEmplaceUniform(projectionMatrixUniform, shaderProgram, "projectionMatrix");
     tryEmplaceUniform(viewMatrixUniform, shaderProgram, "viewMatrix");
+}
+
+// Called by `vBlankTimer`
+void ViewportRenderer::update() {
+    juce::Time now = juce::Time::getCurrentTime();
+
+    float delta = static_cast<float>((now - lastUpdateTime).inSeconds());
+    smoothMouse = expEase(smoothMouse, mousePosition, 10.0, delta);
+    repaint();
+    lastUpdateTime = now;
 }
 
 void ViewportRenderer::render() {
@@ -283,10 +191,20 @@ void ViewportRenderer::render() {
 
     // Set view matrix uniform if it has not been pruned
     if (viewMatrixUniform) {
-        juce::Matrix3D<float> position = juce::Matrix3D<float>::fromTranslation({ 0.0f, 5.0f, -2.0f });
-        juce::Matrix3D<float> rotation = position.rotation({ -1.2f , 0.0f, 0.0f });
+        const float pi = juce::MathConstants<float>::pi;
+        const float pi_2 = pi / 2.0;
 
-        viewMatrixUniform->setMatrix4((rotation * position).mat, 1, false);
+        juce::Matrix3D<float> radius = juce::Matrix3D<float>::fromTranslation({ 0.0f, 0.0f, -5.0f });
+        juce::Matrix3D<float> pivot = radius.rotation({
+            // altitude
+            (1.0f - smoothMouse.y) * -pi,
+            0.0f,
+            // Turntable
+            (smoothMouse.x * 2.0f + 1.0f) * pi_2
+        });
+        juce::Matrix3D<float> lift = juce::Matrix3D<float>::fromTranslation({ 0.0f, 0.0f, -0.25f });
+
+        viewMatrixUniform->setMatrix4(((radius * pivot) * lift).mat, 1, false);
     }
     opengl_assert();
 
@@ -320,6 +238,14 @@ void ViewportRenderer::shutdown() {
     vertexAttributes.reset();
 }
 
+void ViewportRenderer::mouseMove(juce::MouseEvent const &event) {
+    auto bounds = getLocalBounds().toFloat();
+    mousePosition = event.position / juce::Point<float>{ bounds.getWidth(), bounds.getHeight() };
+}
+
+void ViewportRenderer::mouseExit(juce::MouseEvent const &) {
+    mousePosition = INITIAL_MOUSE;
+}
 
 SaunaEditor::SaunaEditor(SaunaProcessor &p) :
     AudioProcessorEditor{ &p },

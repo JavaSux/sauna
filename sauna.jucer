@@ -5,6 +5,12 @@
               pluginVST3Category="Spatial,Stereo" pluginAAXCategory="512" pluginVSTCategory="kPlugCategSpacializer"
               version="0.0.1" headerPath="..\..\steamaudio\include" cppLanguageStandard="20">
   <MAINGROUP id="Cnakd6" name="sauna">
+    <GROUP id="{A308CA9A-A6E5-3033-F59A-5C3A1692B764}" name="shaders">
+      <FILE id="DLgHB2" name="gridfloor.frag.glsl" compile="0" resource="1"
+            file="Source/shaders/gridfloor.frag.glsl"/>
+      <FILE id="JU9YMf" name="standard.vert.glsl" compile="0" resource="1"
+            file="Source/shaders/standard.vert.glsl"/>
+    </GROUP>
     <GROUP id="{05584E14-5B47-978C-6612-EC96A28CE28B}" name="Source">
       <FILE id="gyuMax" name="SaunaControls.cpp" compile="1" resource="0"
             file="Source/SaunaControls.cpp"/>
@@ -21,6 +27,7 @@
     </GROUP>
   </MAINGROUP>
   <MODULES>
+    <MODULE id="juce_animation" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
     <MODULE id="juce_audio_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
     <MODULE id="juce_audio_devices" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
     <MODULE id="juce_audio_formats" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
@@ -47,17 +54,18 @@
       <MODULEPATHS>
         <MODULEPATH id="juce_audio_basics" path="../JUCE/modules"/>
         <MODULEPATH id="juce_audio_devices" path="../JUCE/modules"/>
-        <MODULEPATH id="juce_audio_formats" path="../JUCE/modules"/>
         <MODULEPATH id="juce_audio_plugin_client" path="../JUCE/modules"/>
-        <MODULEPATH id="juce_audio_processors" path="../JUCE/modules"/>
-        <MODULEPATH id="juce_audio_utils" path="../JUCE/modules"/>
         <MODULEPATH id="juce_core" path="../JUCE/modules"/>
         <MODULEPATH id="juce_data_structures" path="../JUCE/modules"/>
         <MODULEPATH id="juce_events" path="../JUCE/modules"/>
         <MODULEPATH id="juce_graphics" path="../JUCE/modules"/>
         <MODULEPATH id="juce_gui_basics" path="../JUCE/modules"/>
-        <MODULEPATH id="juce_gui_extra" path="../JUCE/modules"/>
         <MODULEPATH id="juce_opengl" path="../JUCE/modules"/>
+        <MODULEPATH id="juce_animation" path="../JUCE/modules"/>
+        <MODULEPATH id="juce_gui_extra" path="../JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors" path="../JUCE/modules"/>
+        <MODULEPATH id="juce_audio_utils" path="../JUCE/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="../JUCE/modules"/>
       </MODULEPATHS>
     </VS2022>
   </EXPORTFORMATS>

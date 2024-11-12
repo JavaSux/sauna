@@ -94,23 +94,37 @@ struct Mesh {
 
 
 struct ViewportRenderer: juce::OpenGLAppComponent {
+    static const juce::Point<float> INITIAL_MOUSE;
+
     ViewportRenderer();
     ViewportRenderer(ViewportRenderer const &) = delete;
     ViewportRenderer &operator=(ViewportRenderer const &) = delete;
     ~ViewportRenderer();
+
+    void update();
 
     void initialise() override;
     void render() override;
     void paint(juce::Graphics &) override;
     void shutdown() override;
 
+    void mouseMove(juce::MouseEvent const &) override;
+    void mouseExit(juce::MouseEvent const &) override;
+
 private:
+    juce::VBlankAttachment vBlankTimer;
+    juce::Time lastUpdateTime;
+
     juce::OpenGLContext openGLContext;
     juce::OpenGLShaderProgram shaderProgram;
     std::optional<VertexAttributes> vertexAttributes;
     std::optional<juce::OpenGLShaderProgram::Uniform> projectionMatrixUniform;
     std::optional<juce::OpenGLShaderProgram::Uniform> viewMatrixUniform;
     Mesh mesh;
+
+    // Relative window mouse position [-1, 1]
+    juce::Point<float> mousePosition{ INITIAL_MOUSE };
+    juce::Point<float> smoothMouse{ INITIAL_MOUSE };
 };
 
 
