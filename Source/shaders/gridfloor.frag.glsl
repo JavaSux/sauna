@@ -3,21 +3,31 @@ varying vec4 destinationColour;
 varying vec2 textureCoordOut;
 
 // Returns vec2(shadow, opacity) premultiplied
-vec2 lines(vec2 coords) {
-    float band = smoothstep(0.03, 0.02, abs(coords.x - 0.5));
-    float shadow = 2.0 * abs(coords.y - 0.5);
+vec2 line(vec2 xy) {
+    float width = 0.02;
+    float fade = 0.01;
+
+    float band = smoothstep(width + fade, width, abs(xy.x - 0.5));
+    float shadow = 2.0 * abs(xy.y - 0.5);
     return vec2(sqrt(shadow) * band, band);
 }
 
+vec2 lines(vec2 xy) {
+    return max(line(xy), line(xy.yx));
+}
+
 // Returns vec2(shadow, opacity) premultiplied
-vec2 dots(vec2 coords) {
-    float dist = length(coords - vec2(0.5));
-    float value = smoothstep(0.075, 0.065, dist);
+vec2 dots(vec2 xy) {
+    float radius = 0.065;
+    float fade = 0.01;
+
+    float dist = length(xy - vec2(0.5));
+    float value = smoothstep(radius + fade, radius, dist);
     return vec2(value, value);
 }
 
-float edgeFade(vec2 coords) {
-    float dist = 2.0 * length(coords - vec2(0.5));
+float spotlight(vec2 uv) {
+    float dist = 2.0 * length(uv - vec2(0.5));
     return smoothstep(1.0, 0.0, dist);
 }
 
@@ -30,26 +40,17 @@ vec2 alphaOverDim(vec2 top, vec2 bot, float dim) {
 }
 
 void main() {
-    vec2 pixelDensity = dFdy(worldPosition.xy);
-
-    vec2 tiles = fract(worldPosition.xy);
+    vec2 tiles    = fract(worldPosition.xy);
     vec2 subtiles = fract(worldPosition.xy * 4.0 + 0.5);
 
-    vec2 bigDots = dots(tiles);
-    vec2 smallDots = dots(subtiles);
+    vec2 big   = alphaOverDim(dots(tiles   ), lines(tiles   ), 0.5);
+    vec2 small = alphaOverDim(dots(subtiles), lines(subtiles), 0.5);
 
-    vec2 bigLines = max(lines(tiles), lines(tiles.yx));
-    vec2 smallLines = max(lines(subtiles), lines(subtiles.yx));
+    float texelDensity = length(dFdy(worldPosition.xy));
+    float obliqueFade = pow(smoothstep(0.06, 0.0, texelDensity), 4);
+    vec2 combined = alphaOverDim(big, small, obliqueFade * 0.5);
 
-    vec2 big = alphaOverDim(bigDots, bigLines, 0.5);
-    vec2 small = alphaOverDim(smallDots, smallLines, 0.5);
+    float opacity = combined.x * combined.y * spotlight(textureCoordOut);
 
-    float smudge = smoothstep(0.06, 0.0, length(pixelDensity));
-    vec2 all = alphaOverDim(big, small, pow(smudge, 4) * 0.5);
-    
-    float edgeFade = edgeFade(textureCoordOut);
-
-    float opacity = destinationColour.a * all.x * all.y * edgeFade;
-
-    gl_FragColor = vec4(destinationColour.rgb, opacity);
+    gl_FragColor = vec4(destinationColour.rgb, destinationColour.a * opacity);
 }
