@@ -5,6 +5,7 @@ attribute vec2 textureCoordIn;
 
 uniform mat4 projectionMatrix;
 uniform mat4 viewMatrix;
+uniform mat4 modelMatrix;
 
 varying vec4 destinationColour;
 varying vec2 textureCoordOut;
@@ -14,5 +15,5 @@ void main() {
     destinationColour = sourceColour;
     textureCoordOut = textureCoordIn;
     worldPosition = position;
-    gl_Position = projectionMatrix * viewMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0);
 }

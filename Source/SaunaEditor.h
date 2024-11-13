@@ -12,19 +12,33 @@ struct Vertex {
 
 
 struct VertexAttributes {
+    // May be nullopt for a given shaderprogram if the attribute gets pruned
     std::optional<juce::OpenGLShaderProgram::Attribute> 
         position{},
         normal{},
         sourceColour{},
         textureCoordIn{};
 
-    VertexAttributes() = default;
-    VertexAttributes(juce::OpenGLShaderProgram &);
+    VertexAttributes() = delete;
+    VertexAttributes(juce::OpenGLShaderProgram const &);
+    VertexAttributes(VertexAttributes const &) = delete;
+    VertexAttributes(VertexAttributes &&) noexcept = default;
 
     void enable() const;
     void disable() const;
 };
 
+
+struct Uniforms {
+    // May be nullopt for a given shaderprogram if the uniform gets pruned
+    std::optional<juce::OpenGLShaderProgram::Uniform>
+        modelMatrix,
+        viewMatrix,
+        projectionMatrix;
+
+    Uniforms() = delete;
+    Uniforms(juce::OpenGLShaderProgram const &);
+};
 
 struct BufferHandle {
     bool owning;
@@ -32,41 +46,16 @@ struct BufferHandle {
     GLsizei numIndices;
 
     BufferHandle() = delete;
+    BufferHandle(BufferHandle &&other) noexcept;
     BufferHandle(BufferHandle const &) = delete;
-    BufferHandle(BufferHandle &&other) noexcept :
-        owning{ other.owning },
-        vertexBuffer{ other.vertexBuffer },
-        indexBuffer{ other.indexBuffer },
-        numIndices{ other.numIndices }
-    {
-        other.owning = false;
-    }
-
     BufferHandle(
-        std::vector<Vertex> const &vertices, 
+        std::vector<Vertex> const &vertices,
         std::vector<GLuint> const &indices
-    ) :
-        owning{ true },
-        numIndices{ static_cast<GLsizei>(indices.size()) }
-    {
-        juce::gl::glGenBuffers(1, &vertexBuffer);
-        juce::gl::glBindBuffer(juce::gl::GL_ARRAY_BUFFER, vertexBuffer);
-        juce::gl::glBufferData(
-            juce::gl::GL_ARRAY_BUFFER, 
-            sizeof(Vertex) * vertices.size(), 
-            vertices.data(), 
-            juce::gl::GL_STATIC_DRAW
-        );
+    );
+    BufferHandle &operator=(BufferHandle &&) noexcept;
+    BufferHandle &operator=(BufferHandle &) = delete;
 
-        juce::gl::glGenBuffers(1, &indexBuffer);
-        juce::gl::glBindBuffer(juce::gl::GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
-        juce::gl::glBufferData(
-            juce::gl::GL_ELEMENT_ARRAY_BUFFER,
-            sizeof(uint32_t) * numIndices,
-            indices.data(),
-            juce::gl::GL_STATIC_DRAW
-        );
-    }
+    static BufferHandle quad(float scale, float z, juce::Colour const &color);
 
     ~BufferHandle() {
         if (owning) {
@@ -77,19 +66,30 @@ struct BufferHandle {
 };
 
 struct Mesh {
-    std::vector<BufferHandle> bufferHandles{};
+    BufferHandle bufferHandle;
+    std::shared_ptr<juce::OpenGLShaderProgram> shader;
+    VertexAttributes attribs;
+    Uniforms uniforms;
+    juce::Matrix3D<float> modelMatrix;
 
-    Mesh() = default;
+    Mesh() = delete;
     Mesh(Mesh const &) = delete;
-    Mesh(Mesh &&other) noexcept : bufferHandles{ std::move(other.bufferHandles) } {}
     Mesh &operator=(Mesh const &) = delete;
-    Mesh &operator=(Mesh &&other) noexcept {
-        bufferHandles = std::move(other.bufferHandles);
-        return *this;
-    };
-    ~Mesh() = default;
 
-    void pushQuad(float scale, std::array<float, 4> const &color);
+    Mesh(
+        BufferHandle &&handle,
+        std::shared_ptr<juce::OpenGLShaderProgram> &shader,
+        juce::Matrix3D<float> modelMatrix = {}
+    ) noexcept : 
+        bufferHandle{ std::move(handle) },
+        attribs{ *shader },
+        uniforms{ *shader },
+        shader{ shader },
+        modelMatrix{ modelMatrix }
+    {}
+    Mesh(Mesh &&) noexcept = default;
+    Mesh &operator=(Mesh &&) noexcept = default;
+    ~Mesh() = default;
 };
 
 
@@ -116,11 +116,9 @@ private:
     juce::Time lastUpdateTime;
 
     juce::OpenGLContext openGLContext;
-    juce::OpenGLShaderProgram shaderProgram;
-    std::optional<VertexAttributes> vertexAttributes;
-    std::optional<juce::OpenGLShaderProgram::Uniform> projectionMatrixUniform;
-    std::optional<juce::OpenGLShaderProgram::Uniform> viewMatrixUniform;
-    Mesh mesh;
+    std::shared_ptr<juce::OpenGLShaderProgram> gridFloorShader;
+    std::optional<Mesh> gridFloor;
+    std::optional<Mesh> ball;
 
     // Relative window mouse position [-1, 1]
     juce::Point<float> mousePosition{ INITIAL_MOUSE };

@@ -50,7 +50,7 @@ void main() {
     float obliqueFade = pow(smoothstep(0.06, 0.0, texelDensity), 4);
     vec2 combined = alphaOverDim(big, small, obliqueFade * 0.5);
 
-    float opacity = combined.x * combined.y * spotlight(textureCoordOut);
+    float level = combined.x * combined.y * spotlight(textureCoordOut);
 
-    gl_FragColor = vec4(destinationColour.rgb, destinationColour.a * opacity);
+    gl_FragColor = vec4(destinationColour.rgb * level, destinationColour.a);
 }
