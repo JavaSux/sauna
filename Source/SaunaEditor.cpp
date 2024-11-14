@@ -66,6 +66,7 @@ Uniforms::Uniforms(juce::OpenGLShaderProgram const &shader) {
 
     tryEmplace(projectionMatrix, "projectionMatrix");
     tryEmplace(viewMatrix, "viewMatrix");
+    tryEmplace(modelMatrix, "modelMatrix");
 }
 
 
@@ -161,8 +162,9 @@ const juce::Colour ViewportRenderer::CLEAR_COLOR = juce::Colour::fromFloatRGBA(0
 ViewportRenderer::ViewportRenderer() :
     juce::OpenGLAppComponent{},
     gridFloorShader{ nullptr },
-    lastUpdateTime{ juce::Time::getCurrentTime() },
-    vBlankTimer{ this, [this] { update(); } }
+    startTime{ juce::Time::getCurrentTime() },
+    lastUpdateTime{ startTime },
+    vBlankTimer{ this, [this](){ update(); } }
 {}
 
 ViewportRenderer::~ViewportRenderer() {
@@ -194,7 +196,7 @@ void ViewportRenderer::initialise() {
         gridFloorShader
     );
 
-    /*ballShader = std::make_shared<juce::OpenGLShaderProgram>(openGLContext);
+    ballShader = std::make_shared<juce::OpenGLShaderProgram>(openGLContext);
     if (
         !ballShader->addVertexShader(standardVS)
         || !ballShader->addFragmentShader(ballFS)
@@ -208,16 +210,24 @@ void ViewportRenderer::initialise() {
     ball.emplace(
         BufferHandle::quad(0.3, 0.1, juce::Colour::fromHSL(0.6f, 0.6f, 0.57f, 1.0f)),
         ballShader
-    );*/
+    );
 }
 
 // Called by `vBlankTimer`
 void ViewportRenderer::update() {
+    repaint(); // Request
     juce::Time now = juce::Time::getCurrentTime();
 
     float delta = static_cast<float>((now - lastUpdateTime).inSeconds());
-    smoothMouse = expEase(smoothMouse, mousePosition, 10.0, delta);
-    repaint();
+    float elapsed = static_cast<float>((now - startTime).inSeconds());
+    smoothMouse = expEase(smoothMouse, mousePosition, 16.0, delta);
+
+    if (ball)
+        ball->modelMatrix = juce::Matrix3D<float>::fromTranslation({
+            std::sin(elapsed),
+            std::cos(elapsed),
+            std::sin(elapsed * 4.0f)
+        });
 
     lastUpdateTime = now;
 }
@@ -226,19 +236,6 @@ void ViewportRenderer::render() {
     jassert(juce::OpenGLHelpers::isContextActive());
 
     float desktopScale{ static_cast<float>(openGLContext.getRenderingScale()) };
-    juce::OpenGLHelpers::clear(CLEAR_COLOR);
-
-    // Additive rendering
-    juce::gl::glEnable(juce::gl::GL_BLEND);
-    juce::gl::glBlendFunc(juce::gl::GL_ONE, juce::gl::GL_ONE);
-    juce::gl::glBlendEquation(juce::gl::GL_FUNC_ADD);
-
-    // Set render context bitmap size
-    juce::gl::glViewport(
-        0, 0,
-        juce::roundToInt(desktopScale * (float) getWidth()),
-        juce::roundToInt(desktopScale * (float) getHeight())
-    );
 
     juce::Matrix3D<float> projectionMatrix{ [this]() {
         float halfWidth = 0.5f;
@@ -267,7 +264,9 @@ void ViewportRenderer::render() {
         return radius * pivot * lift;
     }() };
 
-    const auto draw{ [&](Mesh const &mesh) {
+    const auto draw{ [&projectionMatrix, &viewMatrix](Mesh const &mesh) {
+        mesh.shader->use();
+
         if (mesh.uniforms.projectionMatrix) {
             mesh.uniforms.projectionMatrix->setMatrix4(projectionMatrix.mat, 1, false);
         }
@@ -278,7 +277,6 @@ void ViewportRenderer::render() {
             mesh.uniforms.modelMatrix->setMatrix4(mesh.modelMatrix.mat, 1, false);
         }
 
-        mesh.shader->use();
         juce::gl::glBindBuffer(juce::gl::GL_ARRAY_BUFFER, mesh.bufferHandle.vertexBuffer);
         juce::gl::glBindBuffer(juce::gl::GL_ELEMENT_ARRAY_BUFFER, mesh.bufferHandle.indexBuffer);
 
@@ -289,7 +287,20 @@ void ViewportRenderer::render() {
         opengl_assert();
     } };
 
-    // draw(ball.value());
+    juce::gl::glDepthMask(juce::gl::GL_TRUE);
+    juce::gl::glEnable(juce::gl::GL_DEPTH_TEST);
+    // Clear frame, depth, stencil
+    juce::OpenGLHelpers::clear(CLEAR_COLOR);
+
+    draw(ball.value());
+
+    // Additive rendering
+    juce::gl::glEnable(juce::gl::GL_BLEND);
+    juce::gl::glBlendFunc(juce::gl::GL_ONE, juce::gl::GL_ONE);
+    juce::gl::glBlendEquation(juce::gl::GL_FUNC_ADD);
+
+    // Read-only depth buffer for transparent elements
+    juce::gl::glDepthMask(juce::gl::GL_FALSE);
     draw(gridFloor.value());
 
     // Reset the element buffers so child Components draw correctly

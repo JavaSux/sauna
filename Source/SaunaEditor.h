@@ -119,6 +119,7 @@ struct ViewportRenderer: juce::OpenGLAppComponent {
 private:
     juce::VBlankAttachment vBlankTimer;
     juce::Time lastUpdateTime;
+    juce::Time startTime;
 
     juce::OpenGLContext openGLContext;
 
