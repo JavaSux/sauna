@@ -12,6 +12,8 @@ struct Vertex {
 
 
 struct VertexAttributes {
+    using Attribute = juce::OpenGLShaderProgram::Attribute;
+
     // May be nullopt for a given shaderprogram if the attribute gets pruned
     std::optional<juce::OpenGLShaderProgram::Attribute> 
         position{},
@@ -30,6 +32,8 @@ struct VertexAttributes {
 
 
 struct Uniforms {
+    using Uniform = juce::OpenGLShaderProgram::Uniform;
+
     // May be nullopt for a given shaderprogram if the uniform gets pruned
     std::optional<juce::OpenGLShaderProgram::Uniform>
         modelMatrix,
@@ -95,6 +99,7 @@ struct Mesh {
 
 struct ViewportRenderer: juce::OpenGLAppComponent {
     static const juce::Point<float> INITIAL_MOUSE;
+    static const juce::Colour CLEAR_COLOR;
 
     ViewportRenderer();
     ViewportRenderer(ViewportRenderer const &) = delete;
@@ -116,7 +121,10 @@ private:
     juce::Time lastUpdateTime;
 
     juce::OpenGLContext openGLContext;
+
     std::shared_ptr<juce::OpenGLShaderProgram> gridFloorShader;
+    std::shared_ptr<juce::OpenGLShaderProgram> ballShader;
+
     std::optional<Mesh> gridFloor;
     std::optional<Mesh> ball;
 

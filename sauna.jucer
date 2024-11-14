@@ -6,6 +6,7 @@
               version="0.0.1" headerPath="..\..\steamaudio\include" cppLanguageStandard="20">
   <MAINGROUP id="Cnakd6" name="sauna">
     <GROUP id="{A308CA9A-A6E5-3033-F59A-5C3A1692B764}" name="shaders">
+      <FILE id="GVZjzY" name="ball.frag.glsl" compile="0" resource="1" file="Source/shaders/ball.frag.glsl"/>
       <FILE id="ScXKxK" name="gridfloor.frag.glsl" compile="0" resource="1"
             file="Source/shaders/gridfloor.frag.glsl"/>
       <FILE id="hvuojK" name="standard.vert.glsl" compile="0" resource="1"

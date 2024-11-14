@@ -6,24 +6,24 @@
 #include "util.h"
 
 VertexAttributes::VertexAttributes(juce::OpenGLShaderProgram const &shader) {
-    auto tryCreate{
-        [&](GLchar const *name) {
-            return (juce::gl::glGetAttribLocation(shader.getProgramID(), name) >= 0)
-                ? std::make_optional<juce::OpenGLShaderProgram::Attribute>(shader, name)
-                : std::nullopt;
-        } 
-    };
+    auto tryEmplace{ [&](std::optional<Attribute> &location, GLchar const *name) {
+        if (juce::gl::glGetAttribLocation(shader.getProgramID(), name) >= 0) {
+            location.emplace(shader, name);
+        } else {
+            location.reset();
+        }
+    }};
 
-    position = tryCreate("position");
-    normal = tryCreate("normal");
-    sourceColour = tryCreate("sourceColour");
-    textureCoordIn = tryCreate("textureCoordIn");
+    tryEmplace(position, "position");
+    tryEmplace(normal, "normal");
+    tryEmplace(sourceColour, "sourceColour");
+    tryEmplace(textureCoordIn, "textureCoordIn");
 }
 
 void VertexAttributes::enable() const {
     size_t offset{ 0 };
 
-    auto vertexBuffer = [&](decltype(position) const &attrib, GLint size) {
+    auto vertexBuffer{ [&](std::optional<juce::OpenGLShaderProgram::Attribute> const &attrib, GLint size) {
         if (attrib) {
             juce::gl::glVertexAttribPointer(
                 attrib->attributeID, size,
@@ -34,7 +34,7 @@ void VertexAttributes::enable() const {
         }
 
         offset += size;
-    };
+    } };
 
     vertexBuffer(position, 3);
     vertexBuffer(normal, 3);
@@ -43,9 +43,11 @@ void VertexAttributes::enable() const {
 }
 
 void VertexAttributes::disable() const {
-    auto disable = [](decltype(position) const &attrib) {
-        if (attrib) juce::gl::glDisableVertexAttribArray(attrib->attributeID);
-    };
+    auto disable{ [](std::optional<Attribute> const &attrib) {
+        if (attrib) {
+            juce::gl::glDisableVertexAttribArray(attrib->attributeID);
+        }
+    } };
 
     disable(position);
     disable(normal);
@@ -53,17 +55,14 @@ void VertexAttributes::disable() const {
     disable(textureCoordIn);
 }
 
-
 Uniforms::Uniforms(juce::OpenGLShaderProgram const &shader) {
-    auto tryEmplace{
-        [&](std::optional<juce::OpenGLShaderProgram::Uniform> &location, GLchar const *name) {
-            if (juce::gl::glGetUniformLocation(shader.getProgramID(), name) >= 0) {
-                location.emplace(shader, name);
-            } else {
-                location.reset();
-            }
+    auto tryEmplace{ [&](std::optional<Uniform> &location, GLchar const *name) {
+        if (juce::gl::glGetUniformLocation(shader.getProgramID(), name) >= 0) {
+            location.emplace(shader, name);
+        } else {
+            location.reset();
         }
-    };
+    } };
 
     tryEmplace(projectionMatrix, "projectionMatrix");
     tryEmplace(viewMatrix, "viewMatrix");
@@ -157,6 +156,7 @@ BufferHandle BufferHandle::quad(float size, float z, juce::Colour const &color) 
 
 
 const juce::Point<float> ViewportRenderer::INITIAL_MOUSE{ 0.5f, 0.6f };
+const juce::Colour ViewportRenderer::CLEAR_COLOR = juce::Colour::fromFloatRGBA(0.05f, 0.05f, 0.05f, 1.0f);
 
 ViewportRenderer::ViewportRenderer() :
     juce::OpenGLAppComponent{},
@@ -171,12 +171,17 @@ ViewportRenderer::~ViewportRenderer() {
 
 void ViewportRenderer::initialise() {
     // May be called mulitple times by the parent
-    DBG("Initializing shaders");
-    gridFloorShader = std::make_shared<juce::OpenGLShaderProgram>(openGLContext);
+    DBG("Initializing OpenGL resources");
 
+    juce::String
+        standardVS{ juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::standard_vert_glsl) },
+        gridFloorFS{ juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::gridfloor_frag_glsl) },
+        ballFS{ juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::ball_frag_glsl) };
+
+    gridFloorShader = std::make_shared<juce::OpenGLShaderProgram>(openGLContext);
     if (
-        !gridFloorShader->addVertexShader(juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::standard_vert_glsl))
-        || !gridFloorShader->addFragmentShader(juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::gridfloor_frag_glsl))
+        !gridFloorShader->addVertexShader(standardVS)
+        || !gridFloorShader->addFragmentShader(gridFloorFS)
         || !gridFloorShader->link()
     ) {
         throw std::runtime_error{ gridFloorShader->getLastError().toStdString() };
@@ -188,6 +193,22 @@ void ViewportRenderer::initialise() {
         BufferHandle::quad(6.0, 0.0, juce::Colour::fromHSL(0.1f, 0.6f, 0.57f, 1.0f)),
         gridFloorShader
     );
+
+    /*ballShader = std::make_shared<juce::OpenGLShaderProgram>(openGLContext);
+    if (
+        !ballShader->addVertexShader(standardVS)
+        || !ballShader->addFragmentShader(ballFS)
+        || !ballShader->link()
+        ) {
+        throw std::runtime_error{ ballShader->getLastError().toStdString() };
+    }
+
+    ballShader->use();
+
+    ball.emplace(
+        BufferHandle::quad(0.3, 0.1, juce::Colour::fromHSL(0.6f, 0.6f, 0.57f, 1.0f)),
+        ballShader
+    );*/
 }
 
 // Called by `vBlankTimer`
@@ -197,14 +218,15 @@ void ViewportRenderer::update() {
     float delta = static_cast<float>((now - lastUpdateTime).inSeconds());
     smoothMouse = expEase(smoothMouse, mousePosition, 10.0, delta);
     repaint();
+
     lastUpdateTime = now;
 }
 
 void ViewportRenderer::render() {
     jassert(juce::OpenGLHelpers::isContextActive());
 
-    auto desktopScale = (float) openGLContext.getRenderingScale();
-    juce::OpenGLHelpers::clear(juce::Colour::fromFloatRGBA(0.05f, 0.05f, 0.05f, 1.0f));
+    float desktopScale{ static_cast<float>(openGLContext.getRenderingScale()) };
+    juce::OpenGLHelpers::clear(CLEAR_COLOR);
 
     // Additive rendering
     juce::gl::glEnable(juce::gl::GL_BLEND);
@@ -218,7 +240,7 @@ void ViewportRenderer::render() {
         juce::roundToInt(desktopScale * (float) getHeight())
     );
 
-    auto projectionMatrix = [this]() {
+    juce::Matrix3D<float> projectionMatrix{ [this]() {
         float halfWidth = 0.5f;
         float halfHeight = halfWidth * getLocalBounds().toFloat().getAspectRatio(false);
 
@@ -227,9 +249,9 @@ void ViewportRenderer::render() {
             -halfHeight, halfHeight,
             1.0f, 10.0f
         );
-    }();
+    }() };
 
-    auto viewMatrix = [this]() {
+    juce::Matrix3D<float> viewMatrix{ [this]() {
         const float pi = juce::MathConstants<float>::pi;
         const float pi_2 = pi / 2.0;
 
@@ -243,9 +265,9 @@ void ViewportRenderer::render() {
             });
         juce::Matrix3D<float> lift = juce::Matrix3D<float>::fromTranslation({ 0.0f, 0.0f, -0.25f });
         return radius * pivot * lift;
-    }();
+    }() };
 
-    const auto draw = [&](Mesh const &mesh) {
+    const auto draw{ [&](Mesh const &mesh) {
         if (mesh.uniforms.projectionMatrix) {
             mesh.uniforms.projectionMatrix->setMatrix4(projectionMatrix.mat, 1, false);
         }
@@ -259,13 +281,13 @@ void ViewportRenderer::render() {
         mesh.shader->use();
         juce::gl::glBindBuffer(juce::gl::GL_ARRAY_BUFFER, mesh.bufferHandle.vertexBuffer);
         juce::gl::glBindBuffer(juce::gl::GL_ELEMENT_ARRAY_BUFFER, mesh.bufferHandle.indexBuffer);
-        
+
         mesh.attribs.enable();
         juce::gl::glDrawElements(juce::gl::GL_TRIANGLES, mesh.bufferHandle.numIndices, juce::gl::GL_UNSIGNED_INT, nullptr);
         mesh.attribs.disable();
 
         opengl_assert();
-    };
+    } };
 
     // draw(ball.value());
     draw(gridFloor.value());
