@@ -147,7 +147,7 @@ static void steam_assert(IPLerror status, std::string_view description) {
 static void opengl_assert() {
     size_t count{ 0 };
     while (GLenum err = juce::gl::glGetError()) {
-        DBG("OpenGL error: " << err);
+        DBG("OpenGL error: " << (int) err);
         count += 1;
     }
 
