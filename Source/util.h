@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <span>
 #include <format>
 #include <JuceHeader.h>
 #include <phonon.h>
@@ -18,7 +19,7 @@ struct Vec3 {
         y{ -steam.z },
         z{  steam.y }
     {}
-    Vec3(std::array<juce::AudioParameterFloat *, 3> const &params) :
+    Vec3(std::span<juce::AudioParameterFloat const * const, 3> params) :
         x{ *params[0] },
         y{ *params[1] },
         z{ *params[2] }

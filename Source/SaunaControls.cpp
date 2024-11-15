@@ -67,7 +67,7 @@ Vec3 SaunaControls::getPositionFor(float time) const {
 
 	switch (static_cast<SaunaMode>(index)) {
 	case SaunaMode::Static:
-		return staticPosition;
+		return Vec3{ staticPosition };
 
 	case SaunaMode::Orbit:
 		return orbit(time);
@@ -91,7 +91,7 @@ Vec3 SaunaControls::orbit(float time) const {
 	point.x *= orbitStretch->get();
 	point = point.rotateZ(orbitRotation->get());
 
-	Vec3 axis{ Vec3{orbitAxis}.normalized() };
+	Vec3 axis{ Vec3{ orbitAxis }.normalized() };
 	if (axis == Vec3::up()) {
 		// no change
 	} else if (axis == Vec3::down()) {
