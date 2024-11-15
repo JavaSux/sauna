@@ -116,7 +116,7 @@ BufferHandle &BufferHandle::operator=(BufferHandle &&other) noexcept {
     return *this;
 }
 
-BufferHandle BufferHandle::quad(float size, float z, juce::Colour const &color) {
+BufferHandle BufferHandle::quad(float size, juce::Colour const &color) {
     float scale = size / 2.0;
 
     std::array<float, 4> colorRaw{
@@ -127,22 +127,22 @@ BufferHandle BufferHandle::quad(float size, float z, juce::Colour const &color) 
     };
     std::vector<Vertex> vertices{
         Vertex{
-            .position = { -scale, -scale, z },
+            .position = { -scale, -scale, 0.0f },
             .colour = colorRaw,
             .texCoord = { 0.0, 0.0 }
         },
         Vertex{
-            .position = { scale, -scale, z },
+            .position = { scale, -scale, 0.0f },
             .colour = colorRaw,
             .texCoord = { 1.0, 0.0 }
         },
         Vertex{
-            .position = { -scale, scale, z },
+            .position = { -scale, scale, 0.0f },
             .colour = colorRaw,
             .texCoord = { 0.0, 1.0 }
         },
         Vertex{
-            .position = { scale, scale, z },
+            .position = { scale, scale, 0.0f },
             .colour = colorRaw,
             .texCoord = { 1.0, 1.0 }
         }
@@ -177,6 +177,7 @@ void ViewportRenderer::initialise() {
 
     juce::String
         standardVS{ juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::standard_vert_glsl) },
+        billboardVS{ juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::billboard_vert_glsl) },
         gridFloorFS{ juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::gridfloor_frag_glsl) },
         ballFS{ juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::ball_frag_glsl) };
 
@@ -192,13 +193,13 @@ void ViewportRenderer::initialise() {
     gridFloorShader->use();
 
     gridFloor.emplace(
-        BufferHandle::quad(6.0, 0.0, juce::Colour::fromHSL(0.1f, 0.6f, 0.57f, 1.0f)),
+        BufferHandle::quad(6.0, juce::Colour::fromHSL(0.1f, 0.6f, 0.57f, 1.0f)),
         gridFloorShader
     );
 
     ballShader = std::make_shared<juce::OpenGLShaderProgram>(openGLContext);
     if (
-        !ballShader->addVertexShader(standardVS)
+        !ballShader->addVertexShader(billboardVS)
         || !ballShader->addFragmentShader(ballFS)
         || !ballShader->link()
         ) {
@@ -208,7 +209,7 @@ void ViewportRenderer::initialise() {
     ballShader->use();
 
     ball.emplace(
-        BufferHandle::quad(0.3, 0.1, juce::Colour::fromHSL(0.6f, 0.6f, 0.57f, 1.0f)),
+        BufferHandle::quad(0.5f, juce::Colour::fromHSL(0.6f, 0.6f, 0.57f, 1.0f)),
         ballShader
     );
 }
@@ -224,9 +225,9 @@ void ViewportRenderer::update() {
 
     if (ball)
         ball->modelMatrix = juce::Matrix3D<float>::fromTranslation({
-            std::sin(elapsed),
-            std::cos(elapsed),
-            std::sin(elapsed * 4.0f)
+            std::sin(elapsed / 4.0f),
+            std::cos(elapsed / 4.0f),
+            0.0f
         });
 
     lastUpdateTime = now;
@@ -238,13 +239,13 @@ void ViewportRenderer::render() {
     float desktopScale{ static_cast<float>(openGLContext.getRenderingScale()) };
 
     juce::Matrix3D<float> projectionMatrix{ [this]() {
-        float halfWidth = 0.5f;
+        float halfWidth = 0.25f;
         float halfHeight = halfWidth * getLocalBounds().toFloat().getAspectRatio(false);
 
         return juce::Matrix3D<float>::fromFrustum(
             -halfWidth, halfWidth,
             -halfHeight, halfHeight,
-            1.0f, 10.0f
+            0.5f, 10.0f
         );
     }() };
 

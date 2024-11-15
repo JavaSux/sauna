@@ -59,7 +59,7 @@ struct BufferHandle {
     BufferHandle &operator=(BufferHandle &&) noexcept;
     BufferHandle &operator=(BufferHandle &) = delete;
 
-    static BufferHandle quad(float scale, float z, juce::Colour const &color);
+    static BufferHandle quad(float scale, juce::Colour const &color);
 
     ~BufferHandle() {
         if (owning) {

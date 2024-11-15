@@ -2,13 +2,14 @@ varying vec3 worldPosition;
 varying vec4 destinationColour;
 varying vec2 textureCoordOut;
 
+const float LINE_WIDTH = 0.02;
+const float DOT_RADIUS = 0.065;
+
 // Returns vec2(shadow, opacity) premultiplied
 vec2 line(vec2 xy) {
-    float width = 0.02;
-    float fade = 0.01;
-
-    float band = smoothstep(width + fade, width, abs(xy.x - 0.5));
+    float band = float(abs(xy.x - 0.5) <= LINE_WIDTH);
     float shadow = 2.0 * abs(xy.y - 0.5);
+
     return vec2(sqrt(shadow) * band, band);
 }
 
@@ -18,11 +19,9 @@ vec2 lines(vec2 xy) {
 
 // Returns vec2(shadow, opacity) premultiplied
 vec2 dots(vec2 xy) {
-    float radius = 0.065;
-    float fade = 0.01;
-
     float dist = length(xy - vec2(0.5));
-    float value = smoothstep(radius + fade, radius, dist);
+    float value = float(dist <= DOT_RADIUS);
+
     return vec2(value, value);
 }
 
@@ -48,9 +47,9 @@ void main() {
 
     float texelDensity = length(dFdy(worldPosition.xy));
     float obliqueFade = pow(smoothstep(0.06, 0.0, texelDensity), 4);
+
     vec2 combined = alphaOverDim(big, small, obliqueFade * 0.5);
+    float brightness = combined.x * combined.y * spotlight(textureCoordOut);
 
-    float level = combined.x * combined.y * spotlight(textureCoordOut);
-
-    gl_FragColor = vec4(destinationColour.rgb * level, destinationColour.a);
+    gl_FragColor = vec4(destinationColour.rgb * brightness, 1.0);
 }
