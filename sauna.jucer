@@ -11,6 +11,10 @@
             file="Source/shaders/billboard.vert.glsl"/>
       <FILE id="ScXKxK" name="gridfloor.frag.glsl" compile="0" resource="1"
             file="Source/shaders/gridfloor.frag.glsl"/>
+      <FILE id="bxBtmh" name="postprocess.frag.glsl" compile="0" resource="1"
+            file="Source/shaders/postprocess.frag.glsl"/>
+      <FILE id="Q2JSpi" name="postprocess.vert.glsl" compile="0" resource="1"
+            file="Source/shaders/postprocess.vert.glsl"/>
       <FILE id="hvuojK" name="standard.vert.glsl" compile="0" resource="1"
             file="Source/shaders/standard.vert.glsl"/>
     </GROUP>

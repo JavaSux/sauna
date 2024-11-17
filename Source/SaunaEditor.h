@@ -31,17 +31,20 @@ struct VertexAttributes {
 };
 
 
-struct Uniforms {
+struct MeshUniforms {
     using Uniform = juce::OpenGLShaderProgram::Uniform;
 
     // May be nullopt for a given shaderprogram if the uniform gets pruned
-    std::optional<juce::OpenGLShaderProgram::Uniform>
+    juce::OpenGLShaderProgram::Uniform
         modelMatrix,
         viewMatrix,
         projectionMatrix;
 
-    Uniforms() = delete;
-    Uniforms(juce::OpenGLShaderProgram const &);
+    MeshUniforms() = delete;
+    MeshUniforms(juce::OpenGLShaderProgram const &);
+	MeshUniforms(MeshUniforms const &) = delete;
+	MeshUniforms(MeshUniforms &&) noexcept = default;
+	~MeshUniforms() = default;
 };
 
 struct BufferHandle {
@@ -69,11 +72,12 @@ struct BufferHandle {
     }
 };
 
+
 struct Mesh {
     BufferHandle bufferHandle;
     std::shared_ptr<juce::OpenGLShaderProgram> shader;
     VertexAttributes attribs;
-    Uniforms uniforms;
+    MeshUniforms uniforms;
     juce::Matrix3D<float> modelMatrix;
 
     Mesh() = delete;
@@ -97,18 +101,111 @@ struct Mesh {
 };
 
 
-struct ViewportRenderer: juce::OpenGLAppComponent {
+struct BackBuffer {
+	GLuint frameBuffer, outputTexture, depthStencilBuffer;
+	BackBuffer(BackBuffer const &) = delete;
+	BackBuffer(BackBuffer &&) noexcept = default;
+	BackBuffer &operator=(BackBuffer const &) = delete;
+	BackBuffer &operator=(BackBuffer &&) noexcept = default;
+
+	BackBuffer(juce::Point<int> resolution) noexcept {
+		using namespace juce::gl;
+
+		glGenFramebuffers(1, &frameBuffer);
+		glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
+
+		// Use texture for color info
+		glGenTextures(1, &outputTexture);
+		glBindTexture(GL_TEXTURE_2D, outputTexture);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_R11F_G11F_B10F, resolution.x, resolution.y, 0, GL_RGB, GL_FLOAT, nullptr);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, outputTexture, 0);
+
+        // Use renderbuffer for depth/stencil because they are not needed in the shader
+		glGenRenderbuffers(1, &depthStencilBuffer);
+		glBindRenderbuffer(GL_RENDERBUFFER, depthStencilBuffer);
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, resolution.x, resolution.y);
+        glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthStencilBuffer);
+		jassert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	}
+
+	void bindFramebuffer() const {
+		juce::gl::glBindFramebuffer(juce::gl::GL_FRAMEBUFFER, frameBuffer);
+	}
+
+	~BackBuffer() {
+		juce::gl::glDeleteTextures(1, &outputTexture);
+		juce::gl::glDeleteRenderbuffers(1, &depthStencilBuffer);
+		juce::gl::glDeleteFramebuffers(1, &frameBuffer);
+	}
+};
+
+struct PostProcess {
+    using Uniform = juce::OpenGLShaderProgram::Uniform;
+
+    BufferHandle bufferHandle;
+	VertexAttributes attribs;
+    std::shared_ptr<juce::OpenGLShaderProgram> shader;
+	BackBuffer backBuffer;
+
+	Uniform supersampleUniform, renderedImageUniform;
+
+    PostProcess(PostProcess const &) = delete;
+    PostProcess(PostProcess &&) noexcept = default;
+    PostProcess &operator=(PostProcess const &) = delete;
+    PostProcess &operator=(PostProcess &&) noexcept = default;
+
+    PostProcess(
+        std::shared_ptr<juce::OpenGLShaderProgram> &shader,
+        juce::Point<int> originalResolution,
+        int supersample
+    ) noexcept :
+        bufferHandle{ BufferHandle::quad(2.0, juce::Colours::black) },
+        attribs{ *shader },
+		supersampleUniform{ *shader, "supersample" },
+		renderedImageUniform{ *shader, "renderedImage" },
+        shader{ shader },
+        backBuffer{ originalResolution * supersample }
+    {}
+
+	~PostProcess() = default;
+
+    void setUniforms(int supersample) const {
+        if (supersampleUniform.uniformID >= 0) {
+            supersampleUniform.set(supersample);
+        }
+
+		if (renderedImageUniform.uniformID >= 0) {
+			renderedImageUniform.set(0); // GL_TEXTURE0
+		}
+    }
+
+    void resize(juce::Point<int> newOriginalSize, int supersample) {
+		backBuffer = BackBuffer{ newOriginalSize * supersample };
+    }
+};
+
+
+struct ViewportComponent: juce::OpenGLAppComponent {
     static const juce::Point<float> INITIAL_MOUSE;
     static const juce::Colour CLEAR_COLOR;
+    static const int SUPERSAMPLE = 2;
 
-    ViewportRenderer();
-    ViewportRenderer(ViewportRenderer const &) = delete;
-    ViewportRenderer &operator=(ViewportRenderer const &) = delete;
-    ~ViewportRenderer();
+    ViewportComponent();
+    ViewportComponent(ViewportComponent const &) = delete;
+    ViewportComponent &operator=(ViewportComponent const &) = delete;
+    ~ViewportComponent();
 
     void update();
 
     void initialise() override;
+    void recomputeViewportSize();
     void render() override;
     void paint(juce::Graphics &) override;
     void shutdown() override;
@@ -122,9 +219,12 @@ private:
     juce::Time startTime;
 
     juce::OpenGLContext openGLContext;
+	juce::Rectangle<int> componentBounds, renderBounds;
+	std::optional<PostProcess> postprocess;
 
     std::shared_ptr<juce::OpenGLShaderProgram> gridFloorShader;
     std::shared_ptr<juce::OpenGLShaderProgram> ballShader;
+	std::shared_ptr<juce::OpenGLShaderProgram> postprocessShader;
 
     std::optional<Mesh> gridFloor;
     std::optional<Mesh> ball;
@@ -146,7 +246,7 @@ struct SaunaEditor: juce::AudioProcessorEditor {
 
 private:
     SaunaProcessor &audioProcessor;
-    ViewportRenderer viewport;
+    ViewportComponent viewport;
 
     JUCE_LEAK_DETECTOR(SaunaEditor)
 };

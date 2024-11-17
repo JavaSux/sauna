@@ -55,19 +55,11 @@ void VertexAttributes::disable() const {
     disable(textureCoordIn);
 }
 
-Uniforms::Uniforms(juce::OpenGLShaderProgram const &shader) {
-    auto tryEmplace{ [&](std::optional<Uniform> &location, GLchar const *name) {
-        if (juce::gl::glGetUniformLocation(shader.getProgramID(), name) >= 0) {
-            location.emplace(shader, name);
-        } else {
-            location.reset();
-        }
-    } };
-
-    tryEmplace(projectionMatrix, "projectionMatrix");
-    tryEmplace(viewMatrix, "viewMatrix");
-    tryEmplace(modelMatrix, "modelMatrix");
-}
+MeshUniforms::MeshUniforms(juce::OpenGLShaderProgram const &shader) :
+	modelMatrix{ shader, "modelMatrix" },
+	viewMatrix{ shader, "viewMatrix" },
+	projectionMatrix{ shader, "projectionMatrix" }
+{}
 
 
 BufferHandle::BufferHandle(
@@ -117,7 +109,7 @@ BufferHandle &BufferHandle::operator=(BufferHandle &&other) noexcept {
 }
 
 BufferHandle BufferHandle::quad(float size, juce::Colour const &color) {
-    float scale = size / 2.0;
+    float scale = size / 2.0f;
 
     std::array<float, 4> colorRaw{
         color.getFloatRed(),
@@ -155,31 +147,36 @@ BufferHandle BufferHandle::quad(float size, juce::Colour const &color) {
     return { vertices, indices };
 }
 
+const juce::Point<float> ViewportComponent::INITIAL_MOUSE{ 0.5f, 0.6f };
+const juce::Colour ViewportComponent::CLEAR_COLOR = juce::Colour::fromFloatRGBA(0.05f, 0.05f, 0.05f, 1.0f);
 
-const juce::Point<float> ViewportRenderer::INITIAL_MOUSE{ 0.5f, 0.6f };
-const juce::Colour ViewportRenderer::CLEAR_COLOR = juce::Colour::fromFloatRGBA(0.05f, 0.05f, 0.05f, 1.0f);
-
-ViewportRenderer::ViewportRenderer() :
+ViewportComponent::ViewportComponent() :
     juce::OpenGLAppComponent{},
     gridFloorShader{ nullptr },
     startTime{ juce::Time::getCurrentTime() },
     lastUpdateTime{ startTime },
     vBlankTimer{ this, [this](){ update(); } }
-{}
+{
+    recomputeViewportSize();
+}
 
-ViewportRenderer::~ViewportRenderer() {
+ViewportComponent::~ViewportComponent() {
     shutdownOpenGL();
 }
 
-void ViewportRenderer::initialise() {
+void ViewportComponent::initialise() {
     // May be called mulitple times by the parent
     DBG("Initializing OpenGL resources");
 
     juce::String
         standardVS{ juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::standard_vert_glsl) },
         billboardVS{ juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::billboard_vert_glsl) },
+        postprocessVS{ juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::postprocess_vert_glsl) },
         gridFloorFS{ juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::gridfloor_frag_glsl) },
-        ballFS{ juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::ball_frag_glsl) };
+        ballFS{ juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::ball_frag_glsl) },
+        postprocessFS{ juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::postprocess_frag_glsl) };
+
+    recomputeViewportSize();
 
     gridFloorShader = std::make_shared<juce::OpenGLShaderProgram>(openGLContext);
     if (
@@ -212,10 +209,36 @@ void ViewportRenderer::initialise() {
         BufferHandle::quad(0.5f, juce::Colour::fromHSL(0.6f, 0.6f, 0.57f, 1.0f)),
         ballShader
     );
+
+	postprocessShader = std::make_shared<juce::OpenGLShaderProgram>(openGLContext);
+    if (
+        !postprocessShader->addVertexShader(postprocessVS)
+        || !postprocessShader->addFragmentShader(postprocessFS)
+        || !postprocessShader->link()
+        ) {
+        throw std::runtime_error{ postprocessShader->getLastError().toStdString() };
+    }
+	
+    postprocess.emplace(
+        postprocessShader, 
+        juce::Point<int>{ componentBounds.getWidth(), componentBounds.getHeight() }, 
+        ViewportComponent::SUPERSAMPLE
+    );
+}
+
+void ViewportComponent::recomputeViewportSize() {
+    componentBounds = { getLocalBounds() * openGLContext.getRenderingScale() };
+    renderBounds = { componentBounds * SUPERSAMPLE };
+	if (postprocess) {
+		postprocess->resize(
+            { componentBounds.getWidth(), componentBounds.getHeight() }, 
+            SUPERSAMPLE
+        );
+	}
 }
 
 // Called by `vBlankTimer`
-void ViewportRenderer::update() {
+void ViewportComponent::update() {
     repaint(); // Request
     juce::Time now = juce::Time::getCurrentTime();
 
@@ -233,10 +256,11 @@ void ViewportRenderer::update() {
     lastUpdateTime = now;
 }
 
-void ViewportRenderer::render() {
+void ViewportComponent::render() {
     jassert(juce::OpenGLHelpers::isContextActive());
-
-    float desktopScale{ static_cast<float>(openGLContext.getRenderingScale()) };
+    jassert(postprocess);
+	jassert(gridFloor);
+	jassert(ball);
 
     juce::Matrix3D<float> projectionMatrix{ [this]() {
         float halfWidth = 0.25f;
@@ -268,14 +292,14 @@ void ViewportRenderer::render() {
     const auto draw{ [&projectionMatrix, &viewMatrix](Mesh const &mesh) {
         mesh.shader->use();
 
-        if (mesh.uniforms.projectionMatrix) {
-            mesh.uniforms.projectionMatrix->setMatrix4(projectionMatrix.mat, 1, false);
+        if (mesh.uniforms.projectionMatrix.uniformID >= 0) {
+            mesh.uniforms.projectionMatrix.setMatrix4(projectionMatrix.mat, 1, false);
         }
-        if (mesh.uniforms.viewMatrix) {
-            mesh.uniforms.viewMatrix->setMatrix4(viewMatrix.mat, 1, false);
+        if (mesh.uniforms.viewMatrix.uniformID >= 0) {
+            mesh.uniforms.viewMatrix.setMatrix4(viewMatrix.mat, 1, false);
         }
-        if (mesh.uniforms.modelMatrix) {
-            mesh.uniforms.modelMatrix->setMatrix4(mesh.modelMatrix.mat, 1, false);
+        if (mesh.uniforms.modelMatrix.uniformID >= 0) {
+            mesh.uniforms.modelMatrix.setMatrix4(mesh.modelMatrix.mat, 1, false);
         }
 
         juce::gl::glBindBuffer(juce::gl::GL_ARRAY_BUFFER, mesh.bufferHandle.vertexBuffer);
@@ -288,9 +312,20 @@ void ViewportRenderer::render() {
         opengl_assert();
     } };
 
+
+    /* ===================================== */
+    /* Scene rendering */
+    
+	postprocess->backBuffer.bindFramebuffer();
+    juce::gl::glViewport(
+        renderBounds.getX(),     renderBounds.getY(), 
+        renderBounds.getRight(), renderBounds.getBottom()
+    );
+    
     juce::gl::glDepthMask(juce::gl::GL_TRUE);
     juce::gl::glEnable(juce::gl::GL_DEPTH_TEST);
-    // Clear frame, depth, stencil
+
+    // Clear frame, depth, stencil. Must happen after re-enabling depth mask
     juce::OpenGLHelpers::clear(CLEAR_COLOR);
 
     draw(ball.value());
@@ -302,29 +337,59 @@ void ViewportRenderer::render() {
 
     // Read-only depth buffer for transparent elements
     juce::gl::glDepthMask(juce::gl::GL_FALSE);
+
     draw(gridFloor.value());
+
+
+    /* ===================================== */
+    /* Postprocess rendering */
+    juce::gl::glBindFramebuffer(juce::gl::GL_FRAMEBUFFER, 0);
+    juce::gl::glViewport(
+        componentBounds.getX(),     componentBounds.getY(), 
+        componentBounds.getRight(), componentBounds.getBottom()
+    );
+    juce::OpenGLHelpers::clear(CLEAR_COLOR);
+
+    juce::gl::glDisable(juce::gl::GL_DEPTH_TEST);
+    juce::gl::glDisable(juce::gl::GL_BLEND);
+
+	postprocessShader->use();
+	postprocess->setUniforms(ViewportComponent::SUPERSAMPLE);
+
+	juce::gl::glBindBuffer(juce::gl::GL_ARRAY_BUFFER, postprocess->bufferHandle.vertexBuffer);
+	juce::gl::glBindBuffer(juce::gl::GL_ELEMENT_ARRAY_BUFFER, postprocess->bufferHandle.indexBuffer);
+
+	postprocess->attribs.enable();
+    // juce::gl::glActiveTexture(GL_TEXTURE0); // not necessary because texture 0 is active by default
+    juce::gl::glBindTexture(juce::gl::GL_TEXTURE_2D, postprocess->backBuffer.outputTexture);
+	juce::gl::glDrawElements(juce::gl::GL_TRIANGLES, postprocess->bufferHandle.numIndices, juce::gl::GL_UNSIGNED_INT, nullptr);
+	postprocess->attribs.disable();
 
     // Reset the element buffers so child Components draw correctly
     juce::gl::glBindBuffer(juce::gl::GL_ARRAY_BUFFER, 0);
     opengl_assert();
 }
 
-void ViewportRenderer::paint(juce::Graphics &) {
+void ViewportComponent::paint(juce::Graphics &) {
     // Draw overtop of the OpenGL render
 }
 
-void ViewportRenderer::shutdown() {
+void ViewportComponent::shutdown() {
     // May be called multiple times by the parent
     gridFloor.reset();
     gridFloorShader.reset();
+	ball.reset();
+	ballShader.reset();
+	postprocess.reset();
+	postprocessShader.reset();
 }
 
-void ViewportRenderer::mouseMove(juce::MouseEvent const &event) {
+void ViewportComponent::mouseMove(juce::MouseEvent const &event) {
     auto bounds = getLocalBounds().toFloat();
     mousePosition = event.position / juce::Point<float>{ bounds.getWidth(), bounds.getHeight() };
 }
 
-void ViewportRenderer::mouseExit(juce::MouseEvent const &) {
+void ViewportComponent::mouseExit(juce::MouseEvent const &) {
     mousePosition = INITIAL_MOUSE;
 }
 
@@ -351,6 +416,7 @@ void SaunaEditor::resized() {
     // subcomponents in your editor
     
     viewport.setBounds(10, 10, 780, 450);
+    viewport.recomputeViewportSize();
     // TODO make responsive layout
     // TODO https://docs.juce.com/master/classLowLevelGraphicsContext.html#a088c81d6d2bff0f952f990e7f673f020
     // TODO https://docs.juce.com/master/classPath.html#a501f83b0e323fe86d33c047f83451065 
