@@ -148,7 +148,7 @@ BufferHandle BufferHandle::quad(float size, juce::Colour const &color) {
 }
 
 const juce::Point<float> ViewportComponent::INITIAL_MOUSE{ 0.5f, 0.6f };
-const juce::Colour ViewportComponent::CLEAR_COLOR = juce::Colour::fromFloatRGBA(0.05f, 0.05f, 0.05f, 1.0f);
+const juce::Colour ViewportComponent::CLEAR_COLOR = juce::Colours::black;
 
 ViewportComponent::ViewportComponent() :
     juce::OpenGLAppComponent{},
@@ -166,7 +166,7 @@ ViewportComponent::~ViewportComponent() {
 
 void ViewportComponent::initialise() {
     // May be called mulitple times by the parent
-    DBG("Initializing OpenGL resources");
+    DBG("Initializing ViewportComponent resources");
 
     juce::String
         standardVS{ juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::standard_vert_glsl) },
@@ -174,53 +174,30 @@ void ViewportComponent::initialise() {
         postprocessVS{ juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::postprocess_vert_glsl) },
         gridFloorFS{ juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::gridfloor_frag_glsl) },
         ballFS{ juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::ball_frag_glsl) },
-        postprocessFS{ juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::postprocess_frag_glsl) };
+		downsampleFS{ juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::downsample_frag_glsl) },
+        cinematicFS{ juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::cinematic_frag_glsl) };
 
     recomputeViewportSize();
 
-    gridFloorShader = std::make_shared<juce::OpenGLShaderProgram>(openGLContext);
-    if (
-        !gridFloorShader->addVertexShader(standardVS)
-        || !gridFloorShader->addFragmentShader(gridFloorFS)
-        || !gridFloorShader->link()
-    ) {
-        throw std::runtime_error{ gridFloorShader->getLastError().toStdString() };
-    }
-
-    gridFloorShader->use();
-
+	gridFloorShader = loadShader(openGLContext, standardVS, gridFloorFS, "gridFloorShader");
     gridFloor.emplace(
-        BufferHandle::quad(6.0, juce::Colour::fromHSL(0.1f, 0.6f, 0.57f, 1.0f)),
+        BufferHandle::quad(6.0, juce::Colour::fromHSL(0.1f, 0.73f, 0.55f, 1.0f)),
         gridFloorShader
     );
 
-    ballShader = std::make_shared<juce::OpenGLShaderProgram>(openGLContext);
-    if (
-        !ballShader->addVertexShader(billboardVS)
-        || !ballShader->addFragmentShader(ballFS)
-        || !ballShader->link()
-        ) {
-        throw std::runtime_error{ ballShader->getLastError().toStdString() };
-    }
 
-    ballShader->use();
-
+    ballShader = loadShader(openGLContext, billboardVS, ballFS, "ballShader");
     ball.emplace(
-        BufferHandle::quad(0.5f, juce::Colour::fromHSL(0.6f, 0.6f, 0.57f, 1.0f)),
+        BufferHandle::quad(0.5f, juce::Colours::white),
         ballShader
     );
 
-	postprocessShader = std::make_shared<juce::OpenGLShaderProgram>(openGLContext);
-    if (
-        !postprocessShader->addVertexShader(postprocessVS)
-        || !postprocessShader->addFragmentShader(postprocessFS)
-        || !postprocessShader->link()
-        ) {
-        throw std::runtime_error{ postprocessShader->getLastError().toStdString() };
-    }
-	
+
+	downsampleShader = loadShader(openGLContext, postprocessVS, downsampleFS, "downsampleShader");
+	cinematicShader = loadShader(openGLContext, postprocessVS, cinematicFS, "cinematicShader");
     postprocess.emplace(
-        postprocessShader, 
+        downsampleShader,
+        cinematicShader,
         juce::Point<int>{ componentBounds.getWidth(), componentBounds.getHeight() }, 
         ViewportComponent::SUPERSAMPLE
     );
@@ -316,7 +293,7 @@ void ViewportComponent::render() {
     /* ===================================== */
     /* Scene rendering */
     
-	postprocess->backBuffer.bindFramebuffer();
+	postprocess->rasterBuffer.bindFramebuffer();
     juce::gl::glViewport(
         renderBounds.getX(),     renderBounds.getY(), 
         renderBounds.getRight(), renderBounds.getBottom()
@@ -342,28 +319,43 @@ void ViewportComponent::render() {
 
 
     /* ===================================== */
-    /* Postprocess rendering */
-    juce::gl::glBindFramebuffer(juce::gl::GL_FRAMEBUFFER, 0);
+    /* Postprocess downsample */
+	postprocess->downsampleBuffer.bindFramebuffer();
     juce::gl::glViewport(
         componentBounds.getX(),     componentBounds.getY(), 
         componentBounds.getRight(), componentBounds.getBottom()
     );
-    juce::OpenGLHelpers::clear(CLEAR_COLOR);
 
     juce::gl::glDisable(juce::gl::GL_DEPTH_TEST);
     juce::gl::glDisable(juce::gl::GL_BLEND);
 
-	postprocessShader->use();
-	postprocess->setUniforms(ViewportComponent::SUPERSAMPLE);
+	postprocess->downsampleShader->use();
+	postprocess->setDownsampleUniforms(ViewportComponent::SUPERSAMPLE);
 
-	juce::gl::glBindBuffer(juce::gl::GL_ARRAY_BUFFER, postprocess->bufferHandle.vertexBuffer);
-	juce::gl::glBindBuffer(juce::gl::GL_ELEMENT_ARRAY_BUFFER, postprocess->bufferHandle.indexBuffer);
+	juce::gl::glBindBuffer(juce::gl::GL_ARRAY_BUFFER, postprocess->fullscreenQuad.vertexBuffer);
+	juce::gl::glBindBuffer(juce::gl::GL_ELEMENT_ARRAY_BUFFER, postprocess->fullscreenQuad.indexBuffer);
 
-	postprocess->attribs.enable();
+	postprocess->downsampleAttribs.enable();
     // juce::gl::glActiveTexture(GL_TEXTURE0); // not necessary because texture 0 is active by default
-    juce::gl::glBindTexture(juce::gl::GL_TEXTURE_2D, postprocess->backBuffer.outputTexture);
-	juce::gl::glDrawElements(juce::gl::GL_TRIANGLES, postprocess->bufferHandle.numIndices, juce::gl::GL_UNSIGNED_INT, nullptr);
-	postprocess->attribs.disable();
+    juce::gl::glBindTexture(juce::gl::GL_TEXTURE_2D, postprocess->rasterBuffer.outputTexture);
+	juce::gl::glDrawElements(juce::gl::GL_TRIANGLES, postprocess->fullscreenQuad.numIndices, juce::gl::GL_UNSIGNED_INT, nullptr);
+	postprocess->downsampleAttribs.disable();
+
+
+    /* Postprocess cinematic FX */
+    juce::gl::glBindFramebuffer(juce::gl::GL_FRAMEBUFFER, 0);
+	postprocess->cinematicShader->use();
+	postprocess->setCinematicUniforms();
+
+	juce::gl::glBindBuffer(juce::gl::GL_ARRAY_BUFFER, postprocess->fullscreenQuad.vertexBuffer);
+	juce::gl::glBindBuffer(juce::gl::GL_ELEMENT_ARRAY_BUFFER, postprocess->fullscreenQuad.indexBuffer);
+
+	postprocess->cinematicAttribs.enable();
+	// juce::gl::glActiveTexture(GL_TEXTURE0); // not necessary because texture 0 is active by default
+	juce::gl::glBindTexture(juce::gl::GL_TEXTURE_2D, postprocess->downsampleBuffer.outputTexture);
+	juce::gl::glDrawElements(juce::gl::GL_TRIANGLES, postprocess->fullscreenQuad.numIndices, juce::gl::GL_UNSIGNED_INT, nullptr);
+	postprocess->cinematicAttribs.disable();
+
 
     // Reset the element buffers so child Components draw correctly
     juce::gl::glBindBuffer(juce::gl::GL_ARRAY_BUFFER, 0);
@@ -381,7 +373,8 @@ void ViewportComponent::shutdown() {
 	ball.reset();
 	ballShader.reset();
 	postprocess.reset();
-	postprocessShader.reset();
+	downsampleShader.reset();
+	cinematicShader.reset();
 }
 
 void ViewportComponent::mouseMove(juce::MouseEvent const &event) {

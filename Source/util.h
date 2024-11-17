@@ -161,3 +161,27 @@ template<typename Data>
 static Data expEase(Data const &current, Data const &target, float easing, float delta) {
     return target + (current - target) * std::exp(-easing * delta);
 }
+
+static std::shared_ptr<juce::OpenGLShaderProgram> loadShader(
+    juce::OpenGLContext &context,
+    juce::String &vertexSource,
+    juce::String &fragmentSource,
+    char const * shaderName
+) {
+    auto shader = std::make_shared<juce::OpenGLShaderProgram>(context);
+
+    if (!shader->addVertexShader(vertexSource)) {
+        DBG("\n\nVertex Shader Error in " << shaderName << ":\n" << shader->getLastError().toStdString());
+        jassert(false);
+    }
+    if (!shader->addFragmentShader(fragmentSource)) {
+        DBG("\n\nFragment Shader Error in " << shaderName << ":\n" << shader->getLastError().toStdString());
+        jassert(false);
+    }
+    if (!shader->link()) {
+        DBG("\n\nShader Link Error in " << shaderName << ":\n" << shader->getLastError().toStdString());
+        jassert(false);
+    }
+
+    return shader;
+}

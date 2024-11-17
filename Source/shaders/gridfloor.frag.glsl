@@ -2,6 +2,7 @@ varying vec3 worldPosition;
 varying vec4 destinationColour;
 varying vec2 textureCoordOut;
 
+const float BRIGHTNESS = 1.5;
 const float LINE_WIDTH = 0.02;
 const float DOT_RADIUS = 0.065;
 
@@ -49,7 +50,7 @@ void main() {
     float obliqueFade = pow(smoothstep(0.06, 0.0, texelDensity), 4);
 
     vec2 combined = alphaOverDim(big, small, obliqueFade * 0.5);
-    float brightness = combined.x * combined.y * spotlight(textureCoordOut);
+    float value = combined.x * combined.y * spotlight(textureCoordOut);
 
-    gl_FragColor = vec4(destinationColour.rgb * brightness, 1.0);
+    gl_FragColor = vec4(destinationColour.rgb * value * BRIGHTNESS, 1.0);
 }

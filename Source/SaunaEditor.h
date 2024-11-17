@@ -118,8 +118,8 @@ struct BackBuffer {
 		glGenTextures(1, &outputTexture);
 		glBindTexture(GL_TEXTURE_2D, outputTexture);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_R11F_G11F_B10F, resolution.x, resolution.y, 0, GL_RGB, GL_FLOAT, nullptr);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glBindTexture(GL_TEXTURE_2D, 0);
 
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, outputTexture, 0);
@@ -149,12 +149,12 @@ struct BackBuffer {
 struct PostProcess {
     using Uniform = juce::OpenGLShaderProgram::Uniform;
 
-    BufferHandle bufferHandle;
-	VertexAttributes attribs;
-    std::shared_ptr<juce::OpenGLShaderProgram> shader;
-	BackBuffer backBuffer;
+    BufferHandle fullscreenQuad;
+	VertexAttributes downsampleAttribs, cinematicAttribs;
+    std::shared_ptr<juce::OpenGLShaderProgram> downsampleShader, cinematicShader;
+	BackBuffer rasterBuffer, downsampleBuffer;
 
-	Uniform supersampleUniform, renderedImageUniform;
+	Uniform supersampleUniform, renderedImageUniform, downsampledImageUniform;
 
     PostProcess(PostProcess const &) = delete;
     PostProcess(PostProcess &&) noexcept = default;
@@ -162,21 +162,26 @@ struct PostProcess {
     PostProcess &operator=(PostProcess &&) noexcept = default;
 
     PostProcess(
-        std::shared_ptr<juce::OpenGLShaderProgram> &shader,
+        std::shared_ptr<juce::OpenGLShaderProgram> &downsampleShader,
+        std::shared_ptr<juce::OpenGLShaderProgram> &cinematicShader,
         juce::Point<int> originalResolution,
         int supersample
     ) noexcept :
-        bufferHandle{ BufferHandle::quad(2.0, juce::Colours::black) },
-        attribs{ *shader },
-		supersampleUniform{ *shader, "supersample" },
-		renderedImageUniform{ *shader, "renderedImage" },
-        shader{ shader },
-        backBuffer{ originalResolution * supersample }
+        fullscreenQuad{ BufferHandle::quad(2.0, juce::Colours::black) },
+        downsampleAttribs{ *downsampleShader },
+		cinematicAttribs{ *cinematicShader },
+		supersampleUniform{ *downsampleShader, "supersample" },
+		renderedImageUniform{ *downsampleShader, "renderedImage" },
+		downsampledImageUniform{ *cinematicShader, "downsampledImage" },
+		downsampleShader{ downsampleShader },
+		cinematicShader{ cinematicShader },
+        rasterBuffer{ originalResolution * supersample },
+		downsampleBuffer{ originalResolution }
     {}
 
 	~PostProcess() = default;
 
-    void setUniforms(int supersample) const {
+    void setDownsampleUniforms(int supersample) const {
         if (supersampleUniform.uniformID >= 0) {
             supersampleUniform.set(supersample);
         }
@@ -186,8 +191,14 @@ struct PostProcess {
 		}
     }
 
+    void setCinematicUniforms() const {
+        if (downsampledImageUniform.uniformID >= 0) {
+            downsampledImageUniform.set(0); // GL_TEXTURE0
+        }
+    }
+
     void resize(juce::Point<int> newOriginalSize, int supersample) {
-		backBuffer = BackBuffer{ newOriginalSize * supersample };
+		rasterBuffer = BackBuffer{ newOriginalSize * supersample };
     }
 };
 
@@ -195,7 +206,7 @@ struct PostProcess {
 struct ViewportComponent: juce::OpenGLAppComponent {
     static const juce::Point<float> INITIAL_MOUSE;
     static const juce::Colour CLEAR_COLOR;
-    static const int SUPERSAMPLE = 2;
+    static const int SUPERSAMPLE = 4;
 
     ViewportComponent();
     ViewportComponent(ViewportComponent const &) = delete;
@@ -224,7 +235,8 @@ private:
 
     std::shared_ptr<juce::OpenGLShaderProgram> gridFloorShader;
     std::shared_ptr<juce::OpenGLShaderProgram> ballShader;
-	std::shared_ptr<juce::OpenGLShaderProgram> postprocessShader;
+    std::shared_ptr<juce::OpenGLShaderProgram> downsampleShader;
+	std::shared_ptr<juce::OpenGLShaderProgram> cinematicShader;
 
     std::optional<Mesh> gridFloor;
     std::optional<Mesh> ball;
