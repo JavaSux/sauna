@@ -102,17 +102,40 @@ struct Mesh {
 
 
 struct BackBuffer {
-	GLuint frameBuffer, outputTexture, depthStencilBuffer;
-	BackBuffer(BackBuffer const &) = delete;
-	BackBuffer(BackBuffer &&) noexcept = default;
-	BackBuffer &operator=(BackBuffer const &) = delete;
-	BackBuffer &operator=(BackBuffer &&) noexcept = default;
+    bool owning{ true };
+    GLuint frameBuffer{ 0 }, outputTexture{ 0 }, depthStencilBuffer{ 0 };
+    juce::Point<int> resolution;
 
-	BackBuffer(juce::Point<int> resolution) noexcept {
+    BackBuffer(BackBuffer const &) = delete;
+    BackBuffer &operator=(BackBuffer const &) = delete;
+    BackBuffer(BackBuffer &&other) noexcept {
+        this->~BackBuffer();
+
+		owning = other.owning;
+		frameBuffer = other.frameBuffer;
+		outputTexture = other.outputTexture;
+		depthStencilBuffer = other.depthStencilBuffer;
+
+		other.owning = false;
+    };
+	BackBuffer &operator=(BackBuffer &&other) noexcept {
+		this->~BackBuffer();
+
+		owning = other.owning;
+		frameBuffer = other.frameBuffer;
+		outputTexture = other.outputTexture;
+		depthStencilBuffer = other.depthStencilBuffer;
+		other.owning = false;
+		return *this;
+    }
+
+    BackBuffer(juce::Point<int> resolution) : resolution{ resolution } {
 		using namespace juce::gl;
 
 		glGenFramebuffers(1, &frameBuffer);
+        OPENGL_ASSERT();
 		glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
+        OPENGL_ASSERT();
 
 		// Use texture for color info
 		glGenTextures(1, &outputTexture);
@@ -121,14 +144,17 @@ struct BackBuffer {
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glBindTexture(GL_TEXTURE_2D, 0);
+        OPENGL_ASSERT();
 
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, outputTexture, 0);
+        OPENGL_ASSERT();
 
         // Use renderbuffer for depth/stencil because they are not needed in the shader
 		glGenRenderbuffers(1, &depthStencilBuffer);
 		glBindRenderbuffer(GL_RENDERBUFFER, depthStencilBuffer);
 		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, resolution.x, resolution.y);
         glBindRenderbuffer(GL_RENDERBUFFER, 0);
+        OPENGL_ASSERT();
 
 		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthStencilBuffer);
 		jassert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
@@ -140,9 +166,11 @@ struct BackBuffer {
 	}
 
 	~BackBuffer() {
-		juce::gl::glDeleteTextures(1, &outputTexture);
-		juce::gl::glDeleteRenderbuffers(1, &depthStencilBuffer);
-		juce::gl::glDeleteFramebuffers(1, &frameBuffer);
+        if (owning) {
+            juce::gl::glDeleteTextures(1, &outputTexture);
+            juce::gl::glDeleteRenderbuffers(1, &depthStencilBuffer);
+            juce::gl::glDeleteFramebuffers(1, &frameBuffer);
+        }
 	}
 };
 
@@ -150,11 +178,11 @@ struct PostProcess {
     using Uniform = juce::OpenGLShaderProgram::Uniform;
 
     BufferHandle fullscreenQuad;
-	VertexAttributes downsampleAttribs, cinematicAttribs;
+    VertexAttributes downsampleAttribs, cinematicAttribs;
     std::shared_ptr<juce::OpenGLShaderProgram> downsampleShader, cinematicShader;
-	BackBuffer rasterBuffer, downsampleBuffer;
+    BackBuffer rasterBuffer, downsampleBuffer;
 
-	Uniform supersampleUniform, renderedImageUniform, downsampledImageUniform;
+    Uniform supersampleUniform, renderedImageUniform, downsampledImageUniform;
 
     PostProcess(PostProcess const &) = delete;
     PostProcess(PostProcess &&) noexcept = default;
@@ -169,26 +197,26 @@ struct PostProcess {
     ) noexcept :
         fullscreenQuad{ BufferHandle::quad(2.0, juce::Colours::black) },
         downsampleAttribs{ *downsampleShader },
-		cinematicAttribs{ *cinematicShader },
-		supersampleUniform{ *downsampleShader, "supersample" },
-		renderedImageUniform{ *downsampleShader, "renderedImage" },
-		downsampledImageUniform{ *cinematicShader, "downsampledImage" },
-		downsampleShader{ downsampleShader },
-		cinematicShader{ cinematicShader },
+        cinematicAttribs{ *cinematicShader },
+        supersampleUniform{ *downsampleShader, "supersample" },
+        renderedImageUniform{ *downsampleShader, "renderedImage" },
+        downsampledImageUniform{ *cinematicShader, "downsampledImage" },
+        downsampleShader{ downsampleShader },
+        cinematicShader{ cinematicShader },
         rasterBuffer{ originalResolution * supersample },
-		downsampleBuffer{ originalResolution }
+        downsampleBuffer{ originalResolution }
     {}
 
-	~PostProcess() = default;
+    ~PostProcess() = default;
 
     void setDownsampleUniforms(int supersample) const {
         if (supersampleUniform.uniformID >= 0) {
             supersampleUniform.set(supersample);
         }
 
-		if (renderedImageUniform.uniformID >= 0) {
-			renderedImageUniform.set(0); // GL_TEXTURE0
-		}
+        if (renderedImageUniform.uniformID >= 0) {
+            renderedImageUniform.set(0); // GL_TEXTURE0
+        }
     }
 
     void setCinematicUniforms() const {
@@ -197,8 +225,14 @@ struct PostProcess {
         }
     }
 
-    void resize(juce::Point<int> newOriginalSize, int supersample) {
-		rasterBuffer = BackBuffer{ newOriginalSize * supersample };
+    void sizeTo(juce::Point<int> viewportSize, int supersample) {
+        if (rasterBuffer.resolution != viewportSize * supersample) {
+            rasterBuffer = BackBuffer{ viewportSize * supersample };
+        }
+
+		if (downsampleBuffer.resolution != viewportSize) {
+			downsampleBuffer = BackBuffer{ viewportSize };
+		}
     }
 };
 
@@ -206,7 +240,7 @@ struct PostProcess {
 struct ViewportComponent: juce::OpenGLAppComponent {
     static const juce::Point<float> INITIAL_MOUSE;
     static const juce::Colour CLEAR_COLOR;
-    static const int SUPERSAMPLE = 4;
+    static const int SUPERSAMPLE = 3;
 
     ViewportComponent();
     ViewportComponent(ViewportComponent const &) = delete;
@@ -218,6 +252,7 @@ struct ViewportComponent: juce::OpenGLAppComponent {
     void initialise() override;
     void recomputeViewportSize();
     void render() override;
+    void resized() override;
     void paint(juce::Graphics &) override;
     void shutdown() override;
 

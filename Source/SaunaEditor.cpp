@@ -86,14 +86,17 @@ BufferHandle::BufferHandle(
         indices.data(),
         juce::gl::GL_STATIC_DRAW
     );
+	OPENGL_ASSERT();
 }
 
-BufferHandle::BufferHandle(BufferHandle &&other) noexcept :
-    owning{ other.owning },
-    vertexBuffer{ other.vertexBuffer },
-    indexBuffer{ other.indexBuffer },
-    numIndices{ other.numIndices }
-{
+BufferHandle::BufferHandle(BufferHandle &&other) noexcept {
+    this->~BufferHandle();
+    
+	owning = other.owning;
+	vertexBuffer = other.vertexBuffer;
+	indexBuffer = other.indexBuffer;
+	numIndices = other.numIndices;
+
     other.owning = false;
 }
 
@@ -156,9 +159,7 @@ ViewportComponent::ViewportComponent() :
     startTime{ juce::Time::getCurrentTime() },
     lastUpdateTime{ startTime },
     vBlankTimer{ this, [this](){ update(); } }
-{
-    recomputeViewportSize();
-}
+{}
 
 ViewportComponent::~ViewportComponent() {
     shutdownOpenGL();
@@ -206,12 +207,7 @@ void ViewportComponent::initialise() {
 void ViewportComponent::recomputeViewportSize() {
     componentBounds = { getLocalBounds() * openGLContext.getRenderingScale() };
     renderBounds = { componentBounds * SUPERSAMPLE };
-	if (postprocess) {
-		postprocess->resize(
-            { componentBounds.getWidth(), componentBounds.getHeight() }, 
-            SUPERSAMPLE
-        );
-	}
+	// Cannot resize postprocess buffers here because OpenGL context is not active in `resized`
 }
 
 // Called by `vBlankTimer`
@@ -285,9 +281,9 @@ void ViewportComponent::render() {
         mesh.attribs.enable();
         juce::gl::glDrawElements(juce::gl::GL_TRIANGLES, mesh.bufferHandle.numIndices, juce::gl::GL_UNSIGNED_INT, nullptr);
         mesh.attribs.disable();
-
-        opengl_assert();
     } };
+
+	postprocess->sizeTo({ componentBounds.getWidth(), componentBounds.getHeight() }, SUPERSAMPLE);
 
 
     /* ===================================== */
@@ -359,7 +355,10 @@ void ViewportComponent::render() {
 
     // Reset the element buffers so child Components draw correctly
     juce::gl::glBindBuffer(juce::gl::GL_ARRAY_BUFFER, 0);
-    opengl_assert();
+}
+
+void ViewportComponent::resized() {
+	recomputeViewportSize();
 }
 
 void ViewportComponent::paint(juce::Graphics &) {
@@ -396,6 +395,7 @@ SaunaEditor::SaunaEditor(SaunaProcessor &p) :
     setSize(800, 600);
     setTitle("Sauna");
     addAndMakeVisible(viewport);
+	setResizable(true, true);
 }
 
 SaunaEditor::~SaunaEditor() {}
@@ -407,9 +407,11 @@ void SaunaEditor::paint(juce::Graphics &g) {
 void SaunaEditor::resized() {
     // This is generally where you'll want to lay out the positions of any
     // subcomponents in your editor
-    
-    viewport.setBounds(10, 10, 780, 450);
-    viewport.recomputeViewportSize();
+	auto bounds = getBounds();
+	viewport.setBounds( // Calls `resized` automatically
+        bounds.getX() + 10, bounds.getY() + 10, 
+        bounds.getWidth() - 20, bounds.getHeight() - 150
+    );
     // TODO make responsive layout
     // TODO https://docs.juce.com/master/classLowLevelGraphicsContext.html#a088c81d6d2bff0f952f990e7f673f020
     // TODO https://docs.juce.com/master/classPath.html#a501f83b0e323fe86d33c047f83451065 

@@ -145,17 +145,15 @@ static void steam_assert(IPLerror status, std::string_view description) {
     throw std::runtime_error{ message };
 }
 
-static void opengl_assert() {
-    size_t count{ 0 };
-    while (GLenum err = juce::gl::glGetError()) {
-        DBG("OpenGL error: " << (int) err);
-        count += 1;
-    }
+#define OPENGL_ASSERT() \
+    do { \
+        GLenum err = juce::gl::glGetError(); \
+        if (err != juce::gl::GL_NO_ERROR) { \
+            DBG("OpenGL error at " << __FILE__ << ":" << __LINE__ << ", code " << (int) err); \
+            jassertfalse; \
+        } \
+    } while (0)
 
-    if (count > 0) {
-        throw std::runtime_error{ std::format("OpenGL encountered {} errors", count) };
-    }
-}
 
 template<typename Data>
 static Data expEase(Data const &current, Data const &target, float easing, float delta) {
@@ -172,15 +170,15 @@ static std::shared_ptr<juce::OpenGLShaderProgram> loadShader(
 
     if (!shader->addVertexShader(vertexSource)) {
         DBG("\n\nVertex Shader Error in " << shaderName << ":\n" << shader->getLastError().toStdString());
-        jassert(false);
+        jassertfalse;
     }
     if (!shader->addFragmentShader(fragmentSource)) {
         DBG("\n\nFragment Shader Error in " << shaderName << ":\n" << shader->getLastError().toStdString());
-        jassert(false);
+        jassertfalse;
     }
     if (!shader->link()) {
         DBG("\n\nShader Link Error in " << shaderName << ":\n" << shader->getLastError().toStdString());
-        jassert(false);
+        jassertfalse;
     }
 
     return shader;
