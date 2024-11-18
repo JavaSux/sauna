@@ -152,6 +152,8 @@ BufferHandle BufferHandle::quad(float size, juce::Colour const &color) {
 
 const juce::Point<float> ViewportComponent::INITIAL_MOUSE{ 0.5f, 0.6f };
 const juce::Colour ViewportComponent::CLEAR_COLOR = juce::Colours::black;
+const int ViewportComponent::SUPERSAMPLE = 3;
+const double ViewportComponent::MOUSE_DELAY = 0.4;
 
 ViewportComponent::ViewportComponent() :
     juce::OpenGLAppComponent{},
@@ -170,13 +172,13 @@ void ViewportComponent::initialise() {
     DBG("Initializing ViewportComponent resources");
 
     juce::String
-        standardVS{ juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::standard_vert_glsl) },
-        billboardVS{ juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::billboard_vert_glsl) },
+        standardVS   { juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::standard_vert_glsl) },
+        billboardVS  { juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::billboard_vert_glsl) },
         postprocessVS{ juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::postprocess_vert_glsl) },
-        gridFloorFS{ juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::gridfloor_frag_glsl) },
-        ballFS{ juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::ball_frag_glsl) },
-		downsampleFS{ juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::downsample_frag_glsl) },
-        cinematicFS{ juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::cinematic_frag_glsl) };
+        gridFloorFS  { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::gridfloor_frag_glsl) },
+        ballFS       { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::ball_frag_glsl) },
+		downsampleFS { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::downsample_frag_glsl) },
+        cinematicFS  { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::cinematic_frag_glsl) };
 
     recomputeViewportSize();
 
@@ -215,10 +217,15 @@ void ViewportComponent::update() {
     repaint(); // Request
     juce::Time now = juce::Time::getCurrentTime();
 
-    float delta = static_cast<float>((now - lastUpdateTime).inSeconds());
-    float elapsed = static_cast<float>((now - startTime).inSeconds());
-    smoothMouse = expEase(smoothMouse, mousePosition, 16.0, delta);
+    if (
+        (smoothMouse - INITIAL_MOUSE).getDistanceFromOrigin() > 0.0001
+        || mouseEntered && (now - *mouseEntered).inSeconds() > MOUSE_DELAY
+    ) {
+        float delta = static_cast<float>((now - lastUpdateTime).inSeconds());
+        smoothMouse = expEase(smoothMouse, mousePosition, 16.0, delta);
+    }
 
+    float elapsed = static_cast<float>((now - startTime).inSeconds());
     if (ball)
         ball->modelMatrix = juce::Matrix3D<float>::fromTranslation({
             std::sin(elapsed / 4.0f),
@@ -361,10 +368,6 @@ void ViewportComponent::resized() {
 	recomputeViewportSize();
 }
 
-void ViewportComponent::paint(juce::Graphics &) {
-    // Draw overtop of the OpenGL render
-}
-
 void ViewportComponent::shutdown() {
     // May be called multiple times by the parent
     gridFloor.reset();
@@ -381,38 +384,66 @@ void ViewportComponent::mouseMove(juce::MouseEvent const &event) {
     mousePosition = event.position / juce::Point<float>{ bounds.getWidth(), bounds.getHeight() };
 }
 
+void ViewportComponent::mouseEnter(juce::MouseEvent const &) {
+    mouseEntered.emplace(juce::Time::getCurrentTime());
+}
+
 void ViewportComponent::mouseExit(juce::MouseEvent const &) {
+    mouseEntered.reset();
     mousePosition = INITIAL_MOUSE;
 }
+
+
+ControlPanelComponent::ControlPanelComponent(SaunaProcessor &p) : 
+    saunaProcessor{ p },
+    dropShadow{ juce::Colour::fromFloatRGBA(0.0f, 0.0f, 0.0f, 0.8f), 10, {} }
+{
+    leftPanel.setColour(juce::LookAndFeel_V4::ColourScheme::UIColour::widgetBackground, juce::Colours::red);
+    rightPanel.setColour(juce::LookAndFeel_V4::ColourScheme::UIColour::widgetBackground, juce::Colours::blue);
+
+    addAndMakeVisible(leftPanel);
+    addAndMakeVisible(rightPanel);
+}
+
+void ControlPanelComponent::resized() {
+    auto bounds = getLocalBounds();
+    leftPanel.setBounds(bounds.removeFromLeft(200).reduced(8));
+    rightPanel.setBounds(bounds.reduced(8));
+}
+
+void ControlPanelComponent::paint(juce::Graphics &graphics) {
+	graphics.fillAll(juce::Colour::fromHSL(0.0f, 0.0f, 0.15f, 1.0));
+    // Fake shadow of viewport frame
+    dropShadow.drawForRectangle(graphics, { 0, -10, getWidth(), 10 });
+}
+
 
 SaunaEditor::SaunaEditor(SaunaProcessor &p) :
     AudioProcessorEditor{ &p },
     audioProcessor{ p },
-    viewport{}
+    viewport{ viewportFrame.viewport },
+	controlPanel{ p },
+    constrainer{},
+    resizer{ this, &constrainer }
 {
-    // Make sure that before the constructor has finished, you've set the
-    // editor's size to whatever you need it to be.
     setSize(800, 600);
     setTitle("Sauna");
-    addAndMakeVisible(viewport);
-	setResizable(true, true);
+
+    addAndMakeVisible(viewportFrame);
+    addAndMakeVisible(controlPanel);
+    resizer.setAlwaysOnTop(true);
+    addAndMakeVisible(resizer);
+    constrainer.setMinimumSize(300, 250);
 }
 
-SaunaEditor::~SaunaEditor() {}
-
 void SaunaEditor::paint(juce::Graphics &g) {
-    g.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));
+    g.fillAll(juce::Colour::fromHSL(0.0f, 0.0f, 0.28f, 1.0f));
 }
 
 void SaunaEditor::resized() {
-    // This is generally where you'll want to lay out the positions of any
-    // subcomponents in your editor
-	auto bounds = getBounds();
-	viewport.setBounds( // Calls `resized` automatically
-        bounds.getX() + 10, bounds.getY() + 10, 
-        bounds.getWidth() - 20, bounds.getHeight() - 150
-    );
-    // TODO make responsive layout
-    // TODO https://docs.juce.com/master/classLowLevelGraphicsContext.html#a088c81d6d2bff0f952f990e7f673f020
-    // TODO https://docs.juce.com/master/classPath.html#a501f83b0e323fe86d33c047f83451065 
+	resizer.setBounds(getWidth() - 16, getHeight() - 16, 16, 16);
+
+	auto bounds = getLocalBounds();
+	controlPanel.setBounds(bounds.removeFromBottom(120));
+	viewportFrame.setBounds(bounds);
 }
