@@ -34,6 +34,8 @@
       <FILE id="HvRp0c" name="Spatializer.cpp" compile="1" resource="0" file="Source/Spatializer.cpp"/>
       <FILE id="LRhptY" name="Spatializer.h" compile="0" resource="0" file="Source/Spatializer.h"/>
       <FILE id="ZOCkpx" name="util.h" compile="0" resource="0" file="Source/util.h"/>
+      <FILE id="r8hl6h" name="Viewport.cpp" compile="1" resource="0" file="Source/Viewport.cpp"/>
+      <FILE id="tZKN3X" name="Viewport.h" compile="0" resource="0" file="Source/Viewport.h"/>
     </GROUP>
   </MAINGROUP>
   <MODULES>
