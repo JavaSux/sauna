@@ -2,7 +2,7 @@ varying vec3 worldPosition;
 varying vec4 destinationColour;
 varying vec2 textureCoordOut;
 
-const float BRIGHTNESS = 1.5;
+const float BRIGHTNESS = 1.0;
 const float LINE_WIDTH = 0.02;
 const float DOT_RADIUS = 0.065;
 

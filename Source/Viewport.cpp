@@ -145,9 +145,12 @@ BufferHandle BufferHandle::quad(float size, juce::Colour const &color) {
     return { vertices, indices };
 }
 
+void BufferHandle::drawElements() const {
+    juce::gl::glDrawElements(juce::gl::GL_TRIANGLES, numIndices, juce::gl::GL_UNSIGNED_INT, nullptr);
+}
+
 const juce::Point<float> ViewportComponent::INITIAL_MOUSE{ 0.5f, 0.6f };
 const juce::Colour ViewportComponent::CLEAR_COLOR = juce::Colours::black;
-const int ViewportComponent::SUPERSAMPLE = 3;
 const double ViewportComponent::MOUSE_DELAY = 0.4;
 
 ViewportComponent::ViewportComponent() :
@@ -173,7 +176,9 @@ void ViewportComponent::initialise() {
         gridFloorFS  { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::gridfloor_frag_glsl) },
         ballFS       { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::ball_frag_glsl) },
         downsampleFS { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::downsample_frag_glsl) },
-        cinematicFS  { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::cinematic_frag_glsl) };
+        cinematicFS  { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::cinematic_frag_glsl) },
+		gaussianFS{ juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::gaussian_frag_glsl) },
+		bloomAccumulateFS{ juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::bloomAccumulate_frag_glsl) };
 
     recomputeViewportSize();
 
@@ -193,11 +198,15 @@ void ViewportComponent::initialise() {
 
     downsampleShader = loadShader(openGLContext, postprocessVS, downsampleFS, "downsampleShader");
     cinematicShader  = loadShader(openGLContext, postprocessVS, cinematicFS, "cinematicShader");
+	gaussianShader = loadShader(openGLContext, postprocessVS, gaussianFS, "gaussianShader");
+	bloomAccumulateShader = loadShader(openGLContext, postprocessVS, bloomAccumulateFS, "bloomAccumulateShader");
     postprocess.emplace(
         downsampleShader,
         cinematicShader,
-        juce::Point<int>{ componentBounds.getWidth(), componentBounds.getHeight() }, 
-        ViewportComponent::SUPERSAMPLE
+        gaussianShader,
+		bloomAccumulateShader,
+        juce::Point<int>{ componentBounds.getWidth(), componentBounds.getHeight() },
+        SUPERSAMPLE
     );
 }
 
@@ -232,6 +241,8 @@ void ViewportComponent::update() {
 }
 
 void ViewportComponent::render() {
+    using namespace juce::gl;
+
     jassert(juce::OpenGLHelpers::isContextActive());
     jassert(postprocess);
     jassert(gridFloor);
@@ -259,7 +270,7 @@ void ViewportComponent::render() {
             0.0f,
             // Turntable
             (smoothMouse.x * 2.0f + 1.0f) * pi_2
-        });
+            });
 
         juce::Matrix3D<float> lift = juce::Matrix3D<float>::fromTranslation({ 0.0f, 0.0f, -0.25f });
         return radius * pivot * lift;
@@ -278,28 +289,23 @@ void ViewportComponent::render() {
             mesh.uniforms.modelMatrix.setMatrix4(mesh.modelMatrix.mat, 1, false);
         }
 
-        juce::gl::glBindBuffer(juce::gl::GL_ARRAY_BUFFER, mesh.bufferHandle.vertexBuffer);
-        juce::gl::glBindBuffer(juce::gl::GL_ELEMENT_ARRAY_BUFFER, mesh.bufferHandle.indexBuffer);
+        glBindBuffer(GL_ARRAY_BUFFER, mesh.bufferHandle.vertexBuffer);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.bufferHandle.indexBuffer);
 
         mesh.attribs.enable();
-        juce::gl::glDrawElements(juce::gl::GL_TRIANGLES, mesh.bufferHandle.numIndices, juce::gl::GL_UNSIGNED_INT, nullptr);
+        mesh.bufferHandle.drawElements();
         mesh.attribs.disable();
     } };
 
     postprocess->sizeTo({ componentBounds.getWidth(), componentBounds.getHeight() }, SUPERSAMPLE);
 
-
     /* ===================================== */
     /* Scene rendering */
 
-    postprocess->rasterBuffer.bindFramebuffer();
-    juce::gl::glViewport(
-        renderBounds.getX(),     renderBounds.getY(), 
-        renderBounds.getRight(), renderBounds.getBottom()
-    );
+    postprocess->rasterBuffer.setRenderTarget();
 
-    juce::gl::glDepthMask(juce::gl::GL_TRUE);
-    juce::gl::glEnable(juce::gl::GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
 
     // Clear frame, depth, stencil. Must happen after re-enabling depth mask
     juce::OpenGLHelpers::clear(CLEAR_COLOR);
@@ -307,57 +313,20 @@ void ViewportComponent::render() {
     draw(ball.value());
 
     // Additive rendering
-    juce::gl::glEnable(juce::gl::GL_BLEND);
-    juce::gl::glBlendFunc(juce::gl::GL_ONE, juce::gl::GL_ONE);
-    juce::gl::glBlendEquation(juce::gl::GL_FUNC_ADD);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE);
+    glBlendEquation(GL_FUNC_ADD);
 
     // Read-only depth buffer for transparent elements
-    juce::gl::glDepthMask(juce::gl::GL_FALSE);
+    glDepthMask(GL_FALSE);
 
     draw(gridFloor.value());
 
-
-    /* ===================================== */
-    /* Postprocess downsample */
-    postprocess->downsampleBuffer.bindFramebuffer();
-    juce::gl::glViewport(
-        componentBounds.getX(),     componentBounds.getY(), 
-        componentBounds.getRight(), componentBounds.getBottom()
-    );
-
-    juce::gl::glDisable(juce::gl::GL_DEPTH_TEST);
-    juce::gl::glDisable(juce::gl::GL_BLEND);
-
-    postprocess->downsampleShader->use();
-    postprocess->setDownsampleUniforms(ViewportComponent::SUPERSAMPLE);
-
-    juce::gl::glBindBuffer(juce::gl::GL_ARRAY_BUFFER, postprocess->fullscreenQuad.vertexBuffer);
-    juce::gl::glBindBuffer(juce::gl::GL_ELEMENT_ARRAY_BUFFER, postprocess->fullscreenQuad.indexBuffer);
-
-    postprocess->downsampleAttribs.enable();
-    // juce::gl::glActiveTexture(GL_TEXTURE0); // not necessary because texture 0 is active by default
-    juce::gl::glBindTexture(juce::gl::GL_TEXTURE_2D, postprocess->rasterBuffer.outputTexture);
-    juce::gl::glDrawElements(juce::gl::GL_TRIANGLES, postprocess->fullscreenQuad.numIndices, juce::gl::GL_UNSIGNED_INT, nullptr);
-    postprocess->downsampleAttribs.disable();
-
-
-    /* Postprocess cinematic FX */
-    juce::gl::glBindFramebuffer(juce::gl::GL_FRAMEBUFFER, 0);
-    postprocess->cinematicShader->use();
-    postprocess->setCinematicUniforms();
-
-    juce::gl::glBindBuffer(juce::gl::GL_ARRAY_BUFFER, postprocess->fullscreenQuad.vertexBuffer);
-    juce::gl::glBindBuffer(juce::gl::GL_ELEMENT_ARRAY_BUFFER, postprocess->fullscreenQuad.indexBuffer);
-
-    postprocess->cinematicAttribs.enable();
-    // juce::gl::glActiveTexture(GL_TEXTURE0); // not necessary because texture 0 is active by default
-    juce::gl::glBindTexture(juce::gl::GL_TEXTURE_2D, postprocess->downsampleBuffer.outputTexture);
-    juce::gl::glDrawElements(juce::gl::GL_TRIANGLES, postprocess->fullscreenQuad.numIndices, juce::gl::GL_UNSIGNED_INT, nullptr);
-    postprocess->cinematicAttribs.disable();
-
+    // Apply postprocessing
+	postprocess->process(0); // 0 is the presentation buffer
 
     // Reset the element buffers so child Components draw correctly
-    juce::gl::glBindBuffer(juce::gl::GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
 void ViewportComponent::resized() {

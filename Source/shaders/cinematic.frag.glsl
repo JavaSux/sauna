@@ -2,7 +2,7 @@ uniform sampler2D downsampledImage;
 
 varying vec2 textureCoordOut;
 
-const float EXPOSURE = 4.0;
+const float EXPOSURE = 10.0;
 const vec3 LIFT = vec3(0.02);
 const float WHITE_LEVEL = 11.2;
 const float ABBERATION = 1.0 / 256.0;
