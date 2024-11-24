@@ -35,8 +35,8 @@ vec3 uncharted2(vec3 x) {
     return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
 }
 
+vec3 white = uncharted2(vec3(WHITE_LEVEL));
 vec3 tonemap(vec3 color) {
-    const vec3 white = uncharted2(vec3(WHITE_LEVEL));
     return uncharted2(color * EXPOSURE) / white + LIFT;
 }
 
