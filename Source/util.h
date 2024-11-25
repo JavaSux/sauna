@@ -146,13 +146,14 @@ static void steam_assert(IPLerror status, std::string_view description) {
 }
 
 #define OPENGL_ASSERT() \
-    do { \
+    if (juce::juce_isRunningUnderDebugger()) { \
         GLenum err = juce::gl::glGetError(); \
         if (err != juce::gl::GL_NO_ERROR) { \
             DBG("OpenGL error at " << __FILE__ << ":" << __LINE__ << ", code " << (int) err); \
             jassertfalse; \
         } \
-    } while (0)
+    }
+
 
 
 template<typename Data>

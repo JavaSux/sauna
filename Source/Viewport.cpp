@@ -1,183 +1,22 @@
 #include "Viewport.h"
 
-VertexAttributes::VertexAttributes(juce::OpenGLShaderProgram const &shader) {
-    auto tryEmplace{ [&](std::optional<Attribute> &location, GLchar const *name) {
-        if (juce::gl::glGetAttribLocation(shader.getProgramID(), name) >= 0) {
-            location.emplace(shader, name);
-        } else {
-            location.reset();
-        }
-    } };
-
-    tryEmplace(position, "position");
-    tryEmplace(normal, "normal");
-    tryEmplace(sourceColour, "sourceColour");
-    tryEmplace(textureCoordIn, "textureCoordIn");
-}
-
-void VertexAttributes::enable() const {
-    size_t offset{ 0 };
-
-    auto vertexBuffer{ [&](std::optional<juce::OpenGLShaderProgram::Attribute> const &attrib, GLint size) {
-        if (attrib) {
-            juce::gl::glVertexAttribPointer(
-                attrib->attributeID, size,
-                juce::gl::GL_FLOAT, juce::gl::GL_FALSE,
-                sizeof(Vertex), reinterpret_cast<GLvoid *>(sizeof(float) * offset)
-            );
-            juce::gl::glEnableVertexAttribArray(attrib->attributeID);
-        }
-
-        offset += size;
-    } };
-
-    vertexBuffer(position, 3);
-    vertexBuffer(normal, 3);
-    vertexBuffer(sourceColour, 4);
-    vertexBuffer(textureCoordIn, 2);
-}
-
-void VertexAttributes::disable() const {
-    auto disable{ [](std::optional<Attribute> const &attrib) {
-        if (attrib) {
-            juce::gl::glDisableVertexAttribArray(attrib->attributeID);
-        }
-    } };
-
-    disable(position);
-    disable(normal);
-    disable(sourceColour);
-    disable(textureCoordIn);
-}
-
-MeshUniforms::MeshUniforms(juce::OpenGLShaderProgram const &shader) :
-    modelMatrix{ shader, "modelMatrix" },
-    viewMatrix{ shader, "viewMatrix" },
-    projectionMatrix{ shader, "projectionMatrix" }
-{}
-
-
-BufferHandle::BufferHandle(
-    std::vector<Vertex> const &vertices, 
-    std::vector<GLuint> const &indices
-) :
-    owning{ true },
-    numIndices{ static_cast<GLsizei>(indices.size()) }
-{
-    juce::gl::glGenBuffers(1, &vertexBuffer);
-    juce::gl::glBindBuffer(juce::gl::GL_ARRAY_BUFFER, vertexBuffer);
-    juce::gl::glBufferData(
-        juce::gl::GL_ARRAY_BUFFER, 
-        sizeof(Vertex) * vertices.size(), 
-        vertices.data(), 
-        juce::gl::GL_STATIC_DRAW
-    );
-
-    juce::gl::glGenBuffers(1, &indexBuffer);
-    juce::gl::glBindBuffer(juce::gl::GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
-    juce::gl::glBufferData(
-        juce::gl::GL_ELEMENT_ARRAY_BUFFER,
-        sizeof(uint32_t) * numIndices,
-        indices.data(),
-        juce::gl::GL_STATIC_DRAW
-    );
-    OPENGL_ASSERT();
-}
-
-BufferHandle::BufferHandle(BufferHandle &&other) noexcept {
-    this->~BufferHandle();
-
-    owning = other.owning;
-    vertexBuffer = other.vertexBuffer;
-    indexBuffer = other.indexBuffer;
-    numIndices = other.numIndices;
-
-    other.owning = false;
-}
-
-BufferHandle &BufferHandle::operator=(BufferHandle &&other) noexcept {
-    owning = other.owning;
-    vertexBuffer = other.vertexBuffer;
-    indexBuffer = other.indexBuffer;
-    numIndices = other.numIndices;
-
-    other.owning = false;
-
-    return *this;
-}
-
-BufferHandle BufferHandle::quad(float size, juce::Colour const &color) {
-    float scale = size / 2.0f;
-
-    std::array<float, 4> colorRaw{
-        color.getFloatRed(),
-        color.getFloatGreen(),
-        color.getFloatBlue(),
-        color.getFloatAlpha()
-    };
-    std::vector<Vertex> vertices{
-        Vertex{
-            .position = { -scale, -scale, 0.0f },
-            .colour = colorRaw,
-            .texCoord = { 0.0, 0.0 }
-        },
-        Vertex{
-            .position = { scale, -scale, 0.0f },
-            .colour = colorRaw,
-            .texCoord = { 1.0, 0.0 }
-        },
-        Vertex{
-            .position = { -scale, scale, 0.0f },
-            .colour = colorRaw,
-            .texCoord = { 0.0, 1.0 }
-        },
-        Vertex{
-            .position = { scale, scale, 0.0f },
-            .colour = colorRaw,
-            .texCoord = { 1.0, 1.0 }
-        }
-    };
-    std::vector<GLuint> indices{
-        0, 1, 2,
-        2, 1, 3
-    };
-
-    return { vertices, indices };
-}
-
-void BufferHandle::drawElements() const {
-    juce::gl::glDrawElements(juce::gl::GL_TRIANGLES, numIndices, juce::gl::GL_UNSIGNED_INT, nullptr);
-}
-
 const juce::Point<float> ViewportComponent::INITIAL_MOUSE{ 0.5f, 0.6f };
 const juce::Colour ViewportComponent::CLEAR_COLOR = juce::Colours::black;
 const double ViewportComponent::MOUSE_DELAY = 0.4;
-
-ViewportComponent::ViewportComponent() :
-    juce::OpenGLAppComponent{},
-    gridFloorShader{ nullptr },
-    startTime{ juce::Time::getCurrentTime() },
-    lastUpdateTime{ startTime },
-    vBlankTimer{ this, [this](){ update(); } }
-{}
-
-ViewportComponent::~ViewportComponent() {
-    shutdownOpenGL();
-}
 
 void ViewportComponent::initialise() {
     // May be called mulitple times by the parent
     DBG("Initializing ViewportComponent resources");
 
     juce::String
-        standardVS   { juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::standard_vert_glsl) },
-        billboardVS  { juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::billboard_vert_glsl) },
-        postprocessVS{ juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::postprocess_vert_glsl) },
-        gridFloorFS  { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::gridfloor_frag_glsl) },
-        ballFS       { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::ball_frag_glsl) },
-        downsampleFS { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::downsample_frag_glsl) },
-        cinematicFS  { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::cinematic_frag_glsl) },
-		gaussianFS{ juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::gaussian_frag_glsl) },
+        standardVS       { juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::standard_vert_glsl) },
+        billboardVS      { juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::billboard_vert_glsl) },
+        postprocessVS    { juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::postprocess_vert_glsl) },
+        gridFloorFS      { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::gridfloor_frag_glsl) },
+        ballFS           { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::ball_frag_glsl) },
+        downsampleFS     { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::downsample_frag_glsl) },
+        cinematicFS      { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::cinematic_frag_glsl) },
+		gaussianFS       { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::gaussian_frag_glsl) },
 		bloomAccumulateFS{ juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::bloomAccumulate_frag_glsl) };
 
     recomputeViewportSize();

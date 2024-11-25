@@ -30,12 +30,58 @@ struct VertexAttributes {
         textureCoordIn{};
 
     VertexAttributes() = delete;
-    VertexAttributes(juce::OpenGLShaderProgram const &);
     VertexAttributes(VertexAttributes const &) = delete;
     VertexAttributes(VertexAttributes &&) noexcept = default;
 
-    void enable() const;
-    void disable() const;
+    VertexAttributes(juce::OpenGLShaderProgram const &shader) {
+        auto tryEmplace{ [&](std::optional<Attribute> &location, GLchar const *name) {
+            if (juce::gl::glGetAttribLocation(shader.getProgramID(), name) >= 0) {
+                location.emplace(shader, name);
+            } else {
+                location.reset();
+            }
+        } };
+
+        tryEmplace(position, "position");
+        tryEmplace(normal, "normal");
+        tryEmplace(sourceColour, "sourceColour");
+        tryEmplace(textureCoordIn, "textureCoordIn");
+    }
+
+    void enable() const {
+        size_t offset{ 0 };
+
+        auto vertexBuffer{ [&](std::optional<juce::OpenGLShaderProgram::Attribute> const &attrib, GLint size) {
+            if (attrib) {
+                juce::gl::glVertexAttribPointer(
+                    attrib->attributeID, size,
+                    juce::gl::GL_FLOAT, juce::gl::GL_FALSE,
+                    sizeof(Vertex), reinterpret_cast<GLvoid *>(sizeof(float) * offset)
+                );
+                juce::gl::glEnableVertexAttribArray(attrib->attributeID);
+            }
+
+            offset += size;
+            } };
+
+        vertexBuffer(position, 3);
+        vertexBuffer(normal, 3);
+        vertexBuffer(sourceColour, 4);
+        vertexBuffer(textureCoordIn, 2);
+    }
+
+    void disable() const {
+        auto disable{ [](std::optional<Attribute> const &attrib) {
+            if (attrib) {
+                juce::gl::glDisableVertexAttribArray(attrib->attributeID);
+            }
+            } };
+
+        disable(position);
+        disable(normal);
+        disable(sourceColour);
+        disable(textureCoordIn);
+    }
 };
 
 
@@ -49,10 +95,15 @@ struct MeshUniforms {
         projectionMatrix;
 
     MeshUniforms() = delete;
-    MeshUniforms(juce::OpenGLShaderProgram const &);
     MeshUniforms(MeshUniforms const &) = delete;
     MeshUniforms(MeshUniforms &&) noexcept = default;
     ~MeshUniforms() = default;
+
+    MeshUniforms(juce::OpenGLShaderProgram const &shader) :
+        modelMatrix{ shader, "modelMatrix" },
+        viewMatrix{ shader, "viewMatrix" },
+        projectionMatrix{ shader, "projectionMatrix" }
+    {}
 };
 
 
@@ -62,23 +113,103 @@ struct BufferHandle {
     GLsizei numIndices;
 
     BufferHandle() = delete;
-    BufferHandle(BufferHandle &&other) noexcept;
     BufferHandle(BufferHandle const &) = delete;
-    BufferHandle(
-        std::vector<Vertex> const &vertices,
-        std::vector<GLuint> const &indices
-    );
-    BufferHandle &operator=(BufferHandle &&) noexcept;
     BufferHandle &operator=(BufferHandle &) = delete;
 
-    static BufferHandle quad(float scale, juce::Colour const &color);
-	void drawElements() const;
+    BufferHandle(BufferHandle &&other) noexcept {
+        this->~BufferHandle();
+
+        owning = other.owning;
+        vertexBuffer = other.vertexBuffer;
+        indexBuffer = other.indexBuffer;
+        numIndices = other.numIndices;
+
+        other.owning = false;
+    }
+
+    BufferHandle(std::vector<Vertex> const &vertices, std::vector<GLuint> const &indices) :
+        owning{ true },
+        numIndices{ static_cast<GLsizei>(indices.size()) }
+    {
+        juce::gl::glGenBuffers(1, &vertexBuffer);
+        juce::gl::glBindBuffer(juce::gl::GL_ARRAY_BUFFER, vertexBuffer);
+        juce::gl::glBufferData(
+            juce::gl::GL_ARRAY_BUFFER, 
+            sizeof(Vertex) * vertices.size(), 
+            vertices.data(), 
+            juce::gl::GL_STATIC_DRAW
+        );
+
+        juce::gl::glGenBuffers(1, &indexBuffer);
+        juce::gl::glBindBuffer(juce::gl::GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
+        juce::gl::glBufferData(
+            juce::gl::GL_ELEMENT_ARRAY_BUFFER,
+            sizeof(uint32_t) * numIndices,
+            indices.data(),
+            juce::gl::GL_STATIC_DRAW
+        );
+        OPENGL_ASSERT();
+    }
 
     ~BufferHandle() {
         if (owning) {
             juce::gl::glDeleteBuffers(1, &vertexBuffer);
             juce::gl::glDeleteBuffers(1, &indexBuffer);
         }
+    }
+
+    BufferHandle &operator=(BufferHandle &&other) noexcept {
+        owning = other.owning;
+        vertexBuffer = other.vertexBuffer;
+        indexBuffer = other.indexBuffer;
+        numIndices = other.numIndices;
+
+        other.owning = false;
+
+        return *this;
+    }
+
+    static BufferHandle quad(float size, juce::Colour const &color) {
+        float scale = size / 2.0f;
+
+        std::array<float, 4> colorRaw{
+            color.getFloatRed(),
+            color.getFloatGreen(),
+            color.getFloatBlue(),
+            color.getFloatAlpha()
+        };
+        std::vector<Vertex> vertices{
+            Vertex{
+                .position = { -scale, -scale, 0.0f },
+                .colour = colorRaw,
+                .texCoord = { 0.0, 0.0 }
+        },
+            Vertex{
+                .position = { scale, -scale, 0.0f },
+                .colour = colorRaw,
+                .texCoord = { 1.0, 0.0 }
+        },
+            Vertex{
+                .position = { -scale, scale, 0.0f },
+                .colour = colorRaw,
+                .texCoord = { 0.0, 1.0 }
+        },
+            Vertex{
+                .position = { scale, scale, 0.0f },
+                .colour = colorRaw,
+                .texCoord = { 1.0, 1.0 }
+        }
+        };
+        std::vector<GLuint> indices{
+            0, 1, 2,
+            2, 1, 3
+        };
+
+        return { vertices, indices };
+    }
+
+	void drawElements() const {
+        juce::gl::glDrawElements(juce::gl::GL_TRIANGLES, numIndices, juce::gl::GL_UNSIGNED_INT, nullptr);
     }
 };
 
@@ -213,9 +344,24 @@ struct PostProcess {
     using Uniform = juce::OpenGLShaderProgram::Uniform;
 
     BufferHandle fullscreenQuad;
-    VertexAttributes downsampleAttribs, cinematicAttribs, gaussianAttribs, bloomAccumulateAttribs;
-    BackBuffer rasterBuffer, compositingBuffer, bufferA, bufferB;
-	std::shared_ptr<juce::OpenGLShaderProgram> downsampleShader, cinematicShader, gaussianShader, bloomAccumulateShader;
+
+    BackBuffer 
+        rasterBuffer, 
+        compositingBuffer, 
+        bufferA, 
+        bufferB;
+
+    VertexAttributes 
+        downsampleAttribs, 
+        cinematicAttribs, 
+        gaussianAttribs, 
+        bloomAccumulateAttribs;
+
+	std::shared_ptr<juce::OpenGLShaderProgram> 
+        downsampleShader, 
+        cinematicShader, 
+        gaussianShader, 
+        bloomAccumulateShader;
 
     Uniform 
         supersampleUniform, 
@@ -413,10 +559,20 @@ struct ViewportComponent: juce::OpenGLAppComponent {
     static const juce::Colour CLEAR_COLOR;
     static const double MOUSE_DELAY;
 
-    ViewportComponent();
     ViewportComponent(ViewportComponent const &) = delete;
     ViewportComponent &operator=(ViewportComponent const &) = delete;
-    ~ViewportComponent();
+
+    ViewportComponent() :
+        juce::OpenGLAppComponent{},
+        gridFloorShader{ nullptr },
+        startTime{ juce::Time::getCurrentTime() },
+		lastUpdateTime{ startTime },
+        vBlankTimer{ this, [this](){ update(); } }
+    {};
+
+    ~ViewportComponent() {
+        shutdownOpenGL();
+    }
 
     void update();
 
