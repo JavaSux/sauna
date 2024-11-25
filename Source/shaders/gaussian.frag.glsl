@@ -1,8 +1,12 @@
-varying vec2 textureCoordOut;
+#version 150
+
+in vec2 vTexCoord;
 
 uniform sampler2D sourceTexture;
 uniform vec2 sourceResolution;
 uniform bool vertical;
+
+out vec4 fragColor;
 
 // https://lisyarus.github.io/blog/posts/blur-coefficients-generator.html
 // Disabled linear filtering, disable SSC, radius 7
@@ -32,7 +36,7 @@ vec4 blur(vec2 blurDirection) {
     vec2 scale = sourceResolution / fullResolution;
     for (int i = 0; i < SIZE; ++i) {
         vec2 offset = blurDirection * float(i - 7) / sourceResolution;
-        sum += texture(sourceTexture, clamp(textureCoordOut + offset, 0, 1) * scale) * WEIGHTS[i];
+        sum += texture(sourceTexture, clamp(vTexCoord + offset, 0, 1) * scale) * WEIGHTS[i];
     }
 
     return sum;
@@ -40,5 +44,5 @@ vec4 blur(vec2 blurDirection) {
 
 void main() {
     vec2 direction = vertical ? vec2(0.0, 1.0) : vec2(1.0, 0.0);
-	gl_FragColor = blur(direction);
+	fragColor = blur(direction);
 }

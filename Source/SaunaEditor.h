@@ -12,10 +12,10 @@ struct ViewportFrameComponent: juce::Component {
     ViewportComponent viewport;
 
     ViewportFrameComponent() :
-        dropShadow{ juce::Colour::fromFloatRGBA(0.0, 0.0, 0.0, 0.6), 4, { 0, 2 } }
+        dropShadow{ juce::Colour::fromFloatRGBA(0.0f, 0.0f, 0.0f, 0.6f), 4, { 0, 2 } }
     {
         addAndMakeVisible(viewport);
-        roundRectPath.addRoundedRectangle(0, 0, getHeight(), getHeight() , 3);
+        roundRectPath.addRoundedRectangle(0.0f, 0.0f, static_cast<float>(getWidth()), static_cast<float>(getHeight()) , 3.0f);
     }
 
 	void resized() override {
@@ -24,9 +24,9 @@ struct ViewportFrameComponent: juce::Component {
 
 		roundRectPath.clear();
 		roundRectPath.addRoundedRectangle(
-            bounds.getX() - 1, bounds.getY() - 1, 
-            bounds.getWidth() + 2, bounds.getHeight() + 2, 
-            3
+            static_cast<float>(bounds.getX()     - 1), static_cast<float>(bounds.getY()      - 1),
+            static_cast<float>(bounds.getWidth() + 2), static_cast<float>(bounds.getHeight() + 2),
+            3.0f
         );
 	}
 

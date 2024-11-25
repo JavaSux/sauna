@@ -157,15 +157,15 @@ static void steam_assert(IPLerror status, std::string_view description) {
 
 
 template<typename Data>
-static Data expEase(Data const &current, Data const &target, float easing, float delta) {
+static inline Data expEase(Data const &current, Data const &target, float easing, float delta) {
     return target + (current - target) * std::exp(-easing * delta);
 }
 
 static std::shared_ptr<juce::OpenGLShaderProgram> loadShader(
     juce::OpenGLContext &context,
-    juce::String &vertexSource,
-    juce::String &fragmentSource,
-    char const * shaderName
+    char const *vertexSource,
+    char const *fragmentSource,
+    char const *shaderName
 ) {
     auto shader = std::make_shared<juce::OpenGLShaderProgram>(context);
 

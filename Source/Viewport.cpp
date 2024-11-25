@@ -8,45 +8,32 @@ void ViewportComponent::initialise() {
     // May be called mulitple times by the parent
     DBG("Initializing ViewportComponent resources");
 
-    juce::String
-        standardVS       { juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::standard_vert_glsl) },
-        billboardVS      { juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::billboard_vert_glsl) },
-        postprocessVS    { juce::OpenGLHelpers::translateVertexShaderToV3(BinaryData::postprocess_vert_glsl) },
-        gridFloorFS      { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::gridfloor_frag_glsl) },
-        ballFS           { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::ball_frag_glsl) },
-        downsampleFS     { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::downsample_frag_glsl) },
-        cinematicFS      { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::cinematic_frag_glsl) },
-		gaussianFS       { juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::gaussian_frag_glsl) },
-		bloomAccumulateFS{ juce::OpenGLHelpers::translateFragmentShaderToV3(BinaryData::bloomAccumulate_frag_glsl) };
-
     recomputeViewportSize();
 
-    gridFloorShader = loadShader(openGLContext, standardVS, gridFloorFS, "gridFloorShader");
-    gridFloor.emplace(
-        BufferHandle::quad(6.0, juce::Colour::fromHSL(0.1f, 0.73f, 0.55f, 1.0f)),
-        gridFloorShader
-    );
+    gridFloorShader = loadShader(openGLContext, BinaryData::standard_vert_glsl, BinaryData::gridfloor_frag_glsl, "gridFloorShader");  
+    gridFloor.emplace(  
+        BufferHandle::quad(6.0, juce::Colour::fromHSL(0.1f, 0.73f, 0.55f, 1.0f)),  
+        gridFloorShader  
+    );  
 
+    ballShader = loadShader(openGLContext, BinaryData::billboard_vert_glsl, BinaryData::ball_frag_glsl, "ballShader");  
+    ball.emplace(  
+        BufferHandle::quad(0.5f, juce::Colours::white),  
+        ballShader  
+    );  
 
-    ballShader = loadShader(openGLContext, billboardVS, ballFS, "ballShader");
-    ball.emplace(
-        BufferHandle::quad(0.5f, juce::Colours::white),
-        ballShader
-    );
-
-
-    downsampleShader = loadShader(openGLContext, postprocessVS, downsampleFS, "downsampleShader");
-    cinematicShader  = loadShader(openGLContext, postprocessVS, cinematicFS, "cinematicShader");
-	gaussianShader = loadShader(openGLContext, postprocessVS, gaussianFS, "gaussianShader");
-	bloomAccumulateShader = loadShader(openGLContext, postprocessVS, bloomAccumulateFS, "bloomAccumulateShader");
-    postprocess.emplace(
-        downsampleShader,
-        cinematicShader,
-        gaussianShader,
-		bloomAccumulateShader,
-        juce::Point<int>{ componentBounds.getWidth(), componentBounds.getHeight() },
-        SUPERSAMPLE
-    );
+    downsampleShader      = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::downsample_frag_glsl, "downsampleShader");  
+    cinematicShader       = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::cinematic_frag_glsl, "cinematicShader");  
+    gaussianShader        = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::gaussian_frag_glsl, "gaussianShader");  
+    bloomAccumulateShader = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::bloomAccumulate_frag_glsl, "bloomAccumulateShader");  
+    postprocess.emplace(  
+        downsampleShader,  
+        cinematicShader,  
+        gaussianShader,  
+        bloomAccumulateShader,  
+        juce::Point<int>{ componentBounds.getWidth(), componentBounds.getHeight() },  
+        SUPERSAMPLE  
+    );  
 }
 
 void ViewportComponent::recomputeViewportSize() {

@@ -1,6 +1,10 @@
+#version 150
+
+in vec2 vTexCoord;
+
 uniform sampler2D downsampledImage;
 
-varying vec2 textureCoordOut;
+out vec4 fragColor;
 
 const float EXPOSURE = 10.0;
 const vec3 LIFT = vec3(0.02);
@@ -35,8 +39,8 @@ vec3 uncharted2(vec3 x) {
     return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
 }
 
-vec3 white = uncharted2(vec3(WHITE_LEVEL));
 vec3 tonemap(vec3 color) {
+    const vec3 white = uncharted2(vec3(WHITE_LEVEL));
     return uncharted2(color * EXPOSURE) / white + LIFT;
 }
 
@@ -65,8 +69,8 @@ vec3 sample_abberated(vec2 centered_uv, float aspect_ratio) {
 
 void main() {
     float aspect_ratio = aspect_ratio(downsampledImage);
-    vec2 centered_uv = center(textureCoordOut, aspect_ratio);
+    vec2 centered_uv = center(vTexCoord, aspect_ratio);
     vec3 color = sample_abberated(centered_uv, aspect_ratio);
 
-    gl_FragColor = vec4(tonemap(color * vignette(centered_uv)), 1.0);
+    fragColor = vec4(tonemap(color * vignette(centered_uv)), 1.0);
 }

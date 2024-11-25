@@ -1,5 +1,9 @@
+#version 150
+
 uniform sampler2D renderedImage;
 uniform int supersample;
+
+out vec4 fragColor;
 
 void main() {
     ivec2 texCoord = ivec2(gl_FragCoord.xy) * supersample;
@@ -13,5 +17,5 @@ void main() {
     
     color /= float(supersample * supersample);
 
-    gl_FragColor = vec4(color, 1.0);
+    fragColor = vec4(color, 1.0);
 }

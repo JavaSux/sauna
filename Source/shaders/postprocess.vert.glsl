@@ -1,11 +1,11 @@
-attribute vec3 position;
-attribute vec3 normal;
-attribute vec4 sourceColour;
-attribute vec2 textureCoordIn;
+#version 150
 
-varying vec2 textureCoordOut;
+in vec3 aPosition;
+in vec2 aTexCoord;
+
+out vec2 vTexCoord;
 
 void main() {
-    textureCoordOut = textureCoordIn;
-    gl_Position = vec4(position, 1.0);
+    vTexCoord = aTexCoord;
+    gl_Position = vec4(aPosition, 1.0);
 }

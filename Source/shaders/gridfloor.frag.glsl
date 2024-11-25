@@ -1,6 +1,10 @@
-varying vec3 worldPosition;
-varying vec4 destinationColour;
-varying vec2 textureCoordOut;
+#version 150
+
+in vec3 vWorldPosition;
+in vec4 vColor;
+in vec2 vTexCoord;
+
+out vec4 fragColor;
 
 const float BRIGHTNESS = 1.0;
 const float LINE_WIDTH = 0.02;
@@ -40,17 +44,17 @@ vec2 alphaOverDim(vec2 top, vec2 bot, float dim) {
 }
 
 void main() {
-    vec2 tiles    = fract(worldPosition.xy);
-    vec2 subtiles = fract(worldPosition.xy * 4.0 + 0.5);
+    vec2 tiles    = fract(vWorldPosition.xy);
+    vec2 subtiles = fract(vWorldPosition.xy * 4.0 + 0.5);
 
     vec2 big   = alphaOverDim(dots(tiles   ), lines(tiles   ), 0.5);
     vec2 small = alphaOverDim(dots(subtiles), lines(subtiles), 0.5);
 
-    float texelDensity = length(dFdy(worldPosition.xy));
+    float texelDensity = length(dFdy(vWorldPosition.xy));
     float obliqueFade = pow(smoothstep(0.06, 0.0, texelDensity), 4);
 
     vec2 combined = alphaOverDim(big, small, obliqueFade * 0.5);
-    float value = combined.x * combined.y * spotlight(textureCoordOut);
+    float value = combined.x * combined.y * spotlight(vTexCoord);
 
-    gl_FragColor = vec4(destinationColour.rgb * value * BRIGHTNESS, 1.0);
+    fragColor = vec4(vColor.rgb * value * BRIGHTNESS, 1.0);
 }

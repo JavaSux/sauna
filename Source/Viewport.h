@@ -9,7 +9,7 @@
 constexpr int SUPERSAMPLE = 3;
 constexpr int BLOOM_PASSES = 7; // Downsampling means that high pass counts are cheap
 constexpr int BLOOM_DOWNSAMPLE = 2;
-constexpr float BLOOM_STRENGTH = 0.2;
+constexpr float BLOOM_STRENGTH = 0.2f;
 
 struct Vertex {
     std::array<float, 3> position;
@@ -26,8 +26,8 @@ struct VertexAttributes {
     std::optional<juce::OpenGLShaderProgram::Attribute> 
         position{},
         normal{},
-        sourceColour{},
-        textureCoordIn{};
+        color{},
+        texCoord{};
 
     VertexAttributes() = delete;
     VertexAttributes(VertexAttributes const &) = delete;
@@ -42,10 +42,10 @@ struct VertexAttributes {
             }
         } };
 
-        tryEmplace(position, "position");
-        tryEmplace(normal, "normal");
-        tryEmplace(sourceColour, "sourceColour");
-        tryEmplace(textureCoordIn, "textureCoordIn");
+        tryEmplace(position, "aPosition");
+        tryEmplace(normal, "aNormal");
+        tryEmplace(color, "aColor");
+        tryEmplace(texCoord, "aTexCoord");
     }
 
     void enable() const {
@@ -62,12 +62,12 @@ struct VertexAttributes {
             }
 
             offset += size;
-            } };
+        } };
 
         vertexBuffer(position, 3);
         vertexBuffer(normal, 3);
-        vertexBuffer(sourceColour, 4);
-        vertexBuffer(textureCoordIn, 2);
+        vertexBuffer(color, 4);
+        vertexBuffer(texCoord, 2);
     }
 
     void disable() const {
@@ -75,12 +75,12 @@ struct VertexAttributes {
             if (attrib) {
                 juce::gl::glDisableVertexAttribArray(attrib->attributeID);
             }
-            } };
+        } };
 
         disable(position);
         disable(normal);
-        disable(sourceColour);
-        disable(textureCoordIn);
+        disable(color);
+        disable(texCoord);
     }
 };
 

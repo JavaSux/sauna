@@ -1,19 +1,22 @@
-attribute vec3 position;
-attribute vec3 normal;
-attribute vec4 sourceColour;
-attribute vec2 textureCoordIn;
+#version 150
+
+in vec3 aPosition;
+in vec3 aNormal;
+in vec4 aColor;
+in vec2 aTexCoord;
 
 uniform mat4 projectionMatrix;
 uniform mat4 viewMatrix;
 uniform mat4 modelMatrix;
 
-varying vec4 destinationColour;
-varying vec2 textureCoordOut;
-varying vec3 worldPosition;
+out vec3 vWorldPosition;
+out vec3 vNormal;
+out vec4 vColor;
+out vec2 vTexCoord;
 
 void main() {
-    destinationColour = sourceColour;
-    textureCoordOut = textureCoordIn;
-    worldPosition = position;
-    gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0);
+    vColor = aColor;
+    vTexCoord = aTexCoord;
+    vWorldPosition = aPosition;
+    gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(aPosition, 1.0);
 }
