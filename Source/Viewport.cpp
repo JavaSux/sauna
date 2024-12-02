@@ -12,7 +12,7 @@ void ViewportComponent::initialise() {
 
     gridFloorShader = loadShader(openGLContext, BinaryData::standard_vert_glsl, BinaryData::gridfloor_frag_glsl, "gridFloorShader");  
     gridFloor.emplace(  
-        BufferHandle::quad(6.0, juce::Colour::fromHSL(0.1f, 0.73f, 0.55f, 1.0f)),  
+        BufferHandle::quad(6.0, juce::Colour::fromHSV(0.1f, 0.8f, 1.0f, 1.0f)),  
         gridFloorShader  
     );  
 
@@ -32,13 +32,15 @@ void ViewportComponent::initialise() {
         gaussianShader,  
         bloomAccumulateShader,  
         juce::Point<int>{ componentBounds.getWidth(), componentBounds.getHeight() },  
-        SUPERSAMPLE  
-    );  
+        RASTER_SUPERSAMPLE  
+    );
+
+	juce::gl::glHint(juce::gl::GL_FRAGMENT_SHADER_DERIVATIVE_HINT, juce::gl::GL_NICEST);
 }
 
 void ViewportComponent::recomputeViewportSize() {
     componentBounds = { getLocalBounds() * openGLContext.getRenderingScale() };
-    renderBounds = { componentBounds * SUPERSAMPLE };
+    renderBounds = { componentBounds * RASTER_SUPERSAMPLE };
     // Cannot resize postprocess buffers here because OpenGL context is not active in `resized`
 }
 
@@ -123,7 +125,7 @@ void ViewportComponent::render() {
         mesh.attribs.disable();
     } };
 
-    postprocess->sizeTo({ componentBounds.getWidth(), componentBounds.getHeight() }, SUPERSAMPLE);
+    postprocess->sizeTo({ componentBounds.getWidth(), componentBounds.getHeight() }, RASTER_SUPERSAMPLE);
 
     /* ===================================== */
     /* Scene rendering */
@@ -149,7 +151,7 @@ void ViewportComponent::render() {
     draw(gridFloor.value());
 
     // Apply postprocessing
-	postprocess->process(0); // 0 is the presentation buffer
+	postprocess->process(0, false); // 0 is the presentation buffer
 
     // Reset the element buffers so child Components draw correctly
     glBindBuffer(GL_ARRAY_BUFFER, 0);

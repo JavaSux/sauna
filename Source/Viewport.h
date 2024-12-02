@@ -6,10 +6,10 @@
 
 #include "util.h"
 
-constexpr int SUPERSAMPLE = 3;
-constexpr int BLOOM_PASSES = 7; // Downsampling means that high pass counts are cheap
+constexpr int RASTER_SUPERSAMPLE = 2;
+constexpr int BLOOM_PASSES = 7; // Downsampling means that higher pass counts are cheap
 constexpr int BLOOM_DOWNSAMPLE = 2;
-constexpr float BLOOM_STRENGTH = 0.2f;
+constexpr float BLOOM_STRENGTH = 0.125f;
 
 struct Vertex {
     std::array<float, 3> position;
@@ -127,7 +127,7 @@ struct BufferHandle {
         other.owning = false;
     }
 
-    BufferHandle(std::vector<Vertex> const &vertices, std::vector<GLuint> const &indices) :
+    BufferHandle(std::span<const Vertex> vertices, std::span<const GLuint> indices) :
         owning{ true },
         numIndices{ static_cast<GLsizei>(indices.size()) }
     {
@@ -135,7 +135,7 @@ struct BufferHandle {
         juce::gl::glBindBuffer(juce::gl::GL_ARRAY_BUFFER, vertexBuffer);
         juce::gl::glBufferData(
             juce::gl::GL_ARRAY_BUFFER, 
-            sizeof(Vertex) * vertices.size(), 
+            vertices.size_bytes(), 
             vertices.data(), 
             juce::gl::GL_STATIC_DRAW
         );
@@ -144,7 +144,7 @@ struct BufferHandle {
         juce::gl::glBindBuffer(juce::gl::GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
         juce::gl::glBufferData(
             juce::gl::GL_ELEMENT_ARRAY_BUFFER,
-            sizeof(uint32_t) * numIndices,
+            indices.size_bytes(),
             indices.data(),
             juce::gl::GL_STATIC_DRAW
         );
@@ -206,7 +206,7 @@ struct BufferHandle {
         };
 
         return { vertices, indices };
-    }
+	}
 
 	void drawElements() const {
         juce::gl::glDrawElements(juce::gl::GL_TRIANGLES, numIndices, juce::gl::GL_UNSIGNED_INT, nullptr);
@@ -285,8 +285,6 @@ struct BackBuffer {
         glTexImage2D(GL_TEXTURE_2D, 0, GL_R11F_G11F_B10F, resolution.x, resolution.y, 0, GL_RGB, GL_FLOAT, nullptr);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glBindTexture(GL_TEXTURE_2D, 0);
 
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, outputTexture, 0);
@@ -327,6 +325,17 @@ struct BackBuffer {
     void setRenderTarget(bool clear = false) const {
         setRenderTarget(clear, resolution);
     }
+
+	void blitInto(GLuint outputBuffer) const {
+		using namespace juce::gl;
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, frameBuffer);
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, outputBuffer);
+		glBlitFramebuffer(
+			0, 0, resolution.x, resolution.y,
+			0, 0, resolution.x, resolution.y,
+			GL_COLOR_BUFFER_BIT, GL_NEAREST
+		);
+	}
 
     ~BackBuffer() {
         if (owning) {
@@ -430,20 +439,20 @@ struct PostProcess {
         }
     }
 
-    void process(GLuint outputBuffer) const {
+    void process(GLuint outputBuffer, bool skipVFX) const {
         using namespace juce::gl;
 
         glBindBuffer(GL_ARRAY_BUFFER, fullscreenQuad.vertexBuffer);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, fullscreenQuad.indexBuffer);
 
-        // Downsample
+		// Downsample into compositingBuffer
         compositingBuffer.setRenderTarget();
 
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_BLEND);
 
         downsampleShader->use();
-        if (supersampleUniform.uniformID >= 0) { supersampleUniform.set(SUPERSAMPLE); }
+        if (supersampleUniform.uniformID >= 0) { supersampleUniform.set(RASTER_SUPERSAMPLE); }
         if (renderedImageUniform.uniformID >= 0) { renderedImageUniform.set(0); } // GL_TEXTURE0
 
         downsampleAttribs.enable();
@@ -451,16 +460,14 @@ struct PostProcess {
         fullscreenQuad.drawElements();
         downsampleAttribs.disable();
 
+        if (skipVFX) {
+			compositingBuffer.blitInto(outputBuffer);
+			return;
+        }
+
         // Bloom
         if (compositingBuffer.resolution == bufferA.resolution) {
-            // Blit compositingBuffer into bufferA
-            glBindFramebuffer(GL_READ_FRAMEBUFFER, compositingBuffer.frameBuffer);
-            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, bufferA.frameBuffer);
-            glBlitFramebuffer(
-                0, 0, compositingBuffer.resolution.x, compositingBuffer.resolution.y,
-                0, 0, compositingBuffer.resolution.x, compositingBuffer.resolution.y,
-                GL_COLOR_BUFFER_BIT, GL_NEAREST
-            );
+			compositingBuffer.blitInto(bufferA.frameBuffer);
         } else if (compositingBuffer.resolution / 2 == bufferA.resolution) {
             // Downsample 2x
             bufferA.setRenderTarget(true);
@@ -589,8 +596,8 @@ struct ViewportComponent: juce::OpenGLAppComponent {
 
 private:
     juce::VBlankAttachment vBlankTimer;
-    juce::Time lastUpdateTime;
     juce::Time startTime;
+    juce::Time lastUpdateTime;
 
     juce::OpenGLContext openGLContext;
     juce::Rectangle<int> componentBounds, renderBounds;
