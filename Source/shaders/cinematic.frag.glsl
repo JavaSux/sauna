@@ -10,6 +10,7 @@ const float EXPOSURE = 10.0;
 const vec3 LIFT = vec3(0.02);
 const float WHITE_LEVEL = 11.2;
 const float ABBERATION = 1.0 / 256.0;
+const float DISTORTION = 0.3;
 const float VIGNETTE_STRENGTH = 0.5;
 
 // ==== UV operations ====
@@ -19,11 +20,17 @@ float aspect_ratio(sampler2D image) {
 }
 
 vec2 center(vec2 uv, float aspect_ratio) {
-    return (uv * 2.0 - 1.0) / vec2(1.0, aspect_ratio);
+    uv *= 2.0;
+    uv -= 1.0;
+    uv.y /= aspect_ratio;
+    return uv;
 }
 
 vec2 uncenter(vec2 uv, float aspect_ratio) {
-    return uv * vec2(1.0, aspect_ratio) * 0.5 + 0.5;
+    uv.y *= aspect_ratio;
+    uv += 1.0;
+    uv /= 2.0;
+    return uv;
 }
 
 
@@ -55,14 +62,15 @@ float vignette(vec2 centered_uv) {
 vec3 sample_abberated(vec2 centered_uv, float aspect_ratio) {
     vec3 colors[5];
     for (int i=0; i<5; ++i) {
-        vec2 uv = uncenter(centered_uv * (1.0 - float(i) * ABBERATION), aspect_ratio);
+        float scale = float(i) * ABBERATION * length(centered_uv);
+        vec2 uv = uncenter(centered_uv * (1.0 - scale), aspect_ratio);
         colors[i] = texture(downsampledImage, uv).rgb;
     }
 
     return vec3(
-        (colors[4].r + 2.0 * colors[3].r + colors[2].r) / 4.0,
-        (colors[3].g + 2.0 * colors[2].g + colors[1].g) / 4.0,
-        (colors[2].b + 2.0 * colors[1].b + colors[0].b) / 4.0
+        (colors[4].r + (2.0 * colors[3].r) + colors[2].r) / 4.0,
+        (colors[3].g + (2.0 * colors[2].g) + colors[1].g) / 4.0,
+        (colors[2].b + (2.0 * colors[1].b) + colors[0].b) / 4.0
     );
 }
 
@@ -71,6 +79,7 @@ void main() {
     float aspect_ratio = aspect_ratio(downsampledImage);
     vec2 centered_uv = center(vTexCoord, aspect_ratio);
     vec3 color = sample_abberated(centered_uv, aspect_ratio);
+    float vignette = vignette(centered_uv);
 
-    fragColor = vec4(tonemap(color * vignette(centered_uv)), 1.0);
+    fragColor = vec4(tonemap(color * vignette), 1.0);
 }

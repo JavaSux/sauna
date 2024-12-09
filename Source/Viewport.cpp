@@ -11,14 +11,14 @@ void ViewportComponent::initialise() {
     recomputeViewportSize();
 
     gridFloorShader = loadShader(openGLContext, BinaryData::standard_vert_glsl, BinaryData::gridfloor_frag_glsl, "gridFloorShader");  
-    gridFloor.emplace(  
-        BufferHandle::quad(6.0, juce::Colour::fromHSV(0.1f, 0.8f, 1.0f, 1.0f)),  
+    gridFloor.emplace(
+        GLBufferHandle::quad(6.0, juce::Colour::fromHSV(0.1f, 0.75f, 1.0f, 1.0f)),  
         gridFloorShader  
     );  
 
     ballShader = loadShader(openGLContext, BinaryData::billboard_vert_glsl, BinaryData::ball_frag_glsl, "ballShader");  
     ball.emplace(  
-        BufferHandle::quad(0.5f, juce::Colours::white),  
+        GLBufferHandle::quad(0.5f, juce::Colours::white),  
         ballShader  
     );  
 
@@ -104,7 +104,7 @@ void ViewportComponent::render() {
         return radius * pivot * lift;
     }() };
 
-    const auto draw{ [&projectionMatrix, &viewMatrix](Mesh const &mesh) {
+    const auto draw{ [&projectionMatrix, &viewMatrix](GLMesh const &mesh) {
         mesh.shader->use();
 
         if (mesh.uniforms.projectionMatrix.uniformID >= 0) {

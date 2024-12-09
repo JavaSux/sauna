@@ -11,7 +11,7 @@ constexpr int BLOOM_PASSES = 7; // Downsampling means that higher pass counts ar
 constexpr int BLOOM_DOWNSAMPLE = 2;
 constexpr float BLOOM_STRENGTH = 0.125f;
 
-struct Vertex {
+struct GLVertex {
     std::array<float, 3> position;
     std::array<float, 3> normal;
     std::array<float, 4> colour;
@@ -19,7 +19,7 @@ struct Vertex {
 };
 
 
-struct VertexAttributes {
+struct GLVertexAttributes {
     using Attribute = juce::OpenGLShaderProgram::Attribute;
 
     // May be nullopt for a given shaderprogram if the attribute gets pruned
@@ -29,11 +29,11 @@ struct VertexAttributes {
         color{},
         texCoord{};
 
-    VertexAttributes() = delete;
-    VertexAttributes(VertexAttributes const &) = delete;
-    VertexAttributes(VertexAttributes &&) noexcept = default;
+    GLVertexAttributes() = delete;
+    GLVertexAttributes(GLVertexAttributes const &) = delete;
+    GLVertexAttributes(GLVertexAttributes &&) noexcept = default;
 
-    VertexAttributes(juce::OpenGLShaderProgram const &shader) {
+    GLVertexAttributes(juce::OpenGLShaderProgram const &shader) {
         auto tryEmplace{ [&](std::optional<Attribute> &location, GLchar const *name) {
             if (juce::gl::glGetAttribLocation(shader.getProgramID(), name) >= 0) {
                 location.emplace(shader, name);
@@ -56,7 +56,7 @@ struct VertexAttributes {
                 juce::gl::glVertexAttribPointer(
                     attrib->attributeID, size,
                     juce::gl::GL_FLOAT, juce::gl::GL_FALSE,
-                    sizeof(Vertex), reinterpret_cast<GLvoid *>(sizeof(float) * offset)
+                    sizeof(GLVertex), reinterpret_cast<GLvoid *>(sizeof(float) * offset)
                 );
                 juce::gl::glEnableVertexAttribArray(attrib->attributeID);
             }
@@ -85,7 +85,7 @@ struct VertexAttributes {
 };
 
 
-struct MeshUniforms {
+struct GLMeshUniforms {
     using Uniform = juce::OpenGLShaderProgram::Uniform;
 
     // May be nullopt for a given shaderprogram if the uniform gets pruned
@@ -94,12 +94,12 @@ struct MeshUniforms {
         viewMatrix,
         projectionMatrix;
 
-    MeshUniforms() = delete;
-    MeshUniforms(MeshUniforms const &) = delete;
-    MeshUniforms(MeshUniforms &&) noexcept = default;
-    ~MeshUniforms() = default;
+    GLMeshUniforms() = delete;
+    GLMeshUniforms(GLMeshUniforms const &) = delete;
+    GLMeshUniforms(GLMeshUniforms &&) noexcept = default;
+    ~GLMeshUniforms() = default;
 
-    MeshUniforms(juce::OpenGLShaderProgram const &shader) :
+    GLMeshUniforms(juce::OpenGLShaderProgram const &shader) :
         modelMatrix{ shader, "modelMatrix" },
         viewMatrix{ shader, "viewMatrix" },
         projectionMatrix{ shader, "projectionMatrix" }
@@ -107,17 +107,17 @@ struct MeshUniforms {
 };
 
 
-struct BufferHandle {
+struct GLBufferHandle {
     bool owning;
     GLuint vertexBuffer, indexBuffer;
     GLsizei numIndices;
 
-    BufferHandle() = delete;
-    BufferHandle(BufferHandle const &) = delete;
-    BufferHandle &operator=(BufferHandle &) = delete;
+    GLBufferHandle() = delete;
+    GLBufferHandle(GLBufferHandle const &) = delete;
+    GLBufferHandle &operator=(GLBufferHandle &) = delete;
 
-    BufferHandle(BufferHandle &&other) noexcept {
-        this->~BufferHandle();
+    GLBufferHandle(GLBufferHandle &&other) noexcept {
+        this->~GLBufferHandle();
 
         owning = other.owning;
         vertexBuffer = other.vertexBuffer;
@@ -127,7 +127,7 @@ struct BufferHandle {
         other.owning = false;
     }
 
-    BufferHandle(std::span<const Vertex> vertices, std::span<const GLuint> indices) :
+    GLBufferHandle(std::span<const GLVertex> vertices, std::span<const GLuint> indices) :
         owning{ true },
         numIndices{ static_cast<GLsizei>(indices.size()) }
     {
@@ -151,14 +151,14 @@ struct BufferHandle {
         OPENGL_ASSERT();
     }
 
-    ~BufferHandle() {
+    ~GLBufferHandle() {
         if (owning) {
             juce::gl::glDeleteBuffers(1, &vertexBuffer);
             juce::gl::glDeleteBuffers(1, &indexBuffer);
         }
     }
 
-    BufferHandle &operator=(BufferHandle &&other) noexcept {
+    GLBufferHandle &operator=(GLBufferHandle &&other) noexcept {
         owning = other.owning;
         vertexBuffer = other.vertexBuffer;
         indexBuffer = other.indexBuffer;
@@ -169,7 +169,7 @@ struct BufferHandle {
         return *this;
     }
 
-    static BufferHandle quad(float size, juce::Colour const &color) {
+    static GLBufferHandle quad(float size, juce::Colour const &color) {
         float scale = size / 2.0f;
 
         std::array<float, 4> colorRaw{
@@ -178,23 +178,23 @@ struct BufferHandle {
             color.getFloatBlue(),
             color.getFloatAlpha()
         };
-        std::vector<Vertex> vertices{
-            Vertex{
+        std::vector<GLVertex> vertices{
+            GLVertex{
                 .position = { -scale, -scale, 0.0f },
                 .colour = colorRaw,
                 .texCoord = { 0.0, 0.0 }
         },
-            Vertex{
+            GLVertex{
                 .position = { scale, -scale, 0.0f },
                 .colour = colorRaw,
                 .texCoord = { 1.0, 0.0 }
         },
-            Vertex{
+            GLVertex{
                 .position = { -scale, scale, 0.0f },
                 .colour = colorRaw,
                 .texCoord = { 0.0, 1.0 }
         },
-            Vertex{
+            GLVertex{
                 .position = { scale, scale, 0.0f },
                 .colour = colorRaw,
                 .texCoord = { 1.0, 1.0 }
@@ -214,19 +214,19 @@ struct BufferHandle {
 };
 
 
-struct Mesh {
-    BufferHandle bufferHandle;
+struct GLMesh {
+    GLBufferHandle bufferHandle;
     std::shared_ptr<juce::OpenGLShaderProgram> shader;
-    VertexAttributes attribs;
-    MeshUniforms uniforms;
+    GLVertexAttributes attribs;
+    GLMeshUniforms uniforms;
     juce::Matrix3D<float> modelMatrix;
 
-    Mesh() = delete;
-    Mesh(Mesh const &) = delete;
-    Mesh &operator=(Mesh const &) = delete;
+    GLMesh() = delete;
+    GLMesh(GLMesh const &) = delete;
+    GLMesh &operator=(GLMesh const &) = delete;
 
-    Mesh(
-        BufferHandle &&handle,
+    GLMesh(
+        GLBufferHandle &&handle,
         std::shared_ptr<juce::OpenGLShaderProgram> &shader,
         juce::Matrix3D<float> modelMatrix = {}
     ) noexcept : 
@@ -236,21 +236,21 @@ struct Mesh {
         shader{ shader },
         modelMatrix{ modelMatrix }
     {}
-    Mesh(Mesh &&) noexcept = default;
-    Mesh &operator=(Mesh &&) noexcept = default;
-    ~Mesh() = default;
+    GLMesh(GLMesh &&) noexcept = default;
+    GLMesh &operator=(GLMesh &&) noexcept = default;
+    ~GLMesh() = default;
 };
 
 
-struct BackBuffer {
+struct GLBackBuffer {
     bool owning{ true };
     GLuint frameBuffer{ 0 }, outputTexture{ 0 }, depthStencilBuffer{ 0 };
     juce::Point<int> resolution;
 
-    BackBuffer(BackBuffer const &) = delete;
-    BackBuffer &operator=(BackBuffer const &) = delete;
-    BackBuffer(BackBuffer &&other) noexcept {
-        this->~BackBuffer();
+    GLBackBuffer(GLBackBuffer const &) = delete;
+    GLBackBuffer &operator=(GLBackBuffer const &) = delete;
+    GLBackBuffer(GLBackBuffer &&other) noexcept {
+        this->~GLBackBuffer();
 
         owning = other.owning;
         frameBuffer = other.frameBuffer;
@@ -260,8 +260,8 @@ struct BackBuffer {
 
         other.owning = false;
     };
-    BackBuffer &operator=(BackBuffer &&other) noexcept {
-        this->~BackBuffer();
+    GLBackBuffer &operator=(GLBackBuffer &&other) noexcept {
+        this->~GLBackBuffer();
 
         owning = other.owning;
         frameBuffer = other.frameBuffer;
@@ -273,7 +273,7 @@ struct BackBuffer {
         return *this;
     }
 
-    BackBuffer(juce::Point<int> resolution, bool useDepthStencil) : resolution{ resolution } {
+    GLBackBuffer(juce::Point<int> resolution, bool useDepthStencil) : resolution{ resolution } {
         using namespace juce::gl;
 
         glGenFramebuffers(1, &frameBuffer);
@@ -337,7 +337,7 @@ struct BackBuffer {
 		);
 	}
 
-    ~BackBuffer() {
+    ~GLBackBuffer() {
         if (owning) {
             if (depthStencilBuffer) {
                 juce::gl::glDeleteRenderbuffers(1, &depthStencilBuffer);
@@ -352,15 +352,15 @@ struct BackBuffer {
 struct PostProcess {
     using Uniform = juce::OpenGLShaderProgram::Uniform;
 
-    BufferHandle fullscreenQuad;
+    GLBufferHandle fullscreenQuad;
 
-    BackBuffer 
+    GLBackBuffer 
         rasterBuffer, 
         compositingBuffer, 
         bufferA, 
         bufferB;
 
-    VertexAttributes 
+    GLVertexAttributes 
         downsampleAttribs, 
         cinematicAttribs, 
         gaussianAttribs, 
@@ -396,7 +396,7 @@ struct PostProcess {
         juce::Point<int> viewportSize,
         int supersample
     ) noexcept :
-        fullscreenQuad{ BufferHandle::quad(2.0, juce::Colours::black) },
+        fullscreenQuad{ GLBufferHandle::quad(2.0, juce::Colours::black) },
         downsampleAttribs{ *downsampleShader },
         cinematicAttribs{ *cinematicShader },
 		gaussianAttribs{ *gaussianShader },
@@ -432,10 +432,10 @@ struct PostProcess {
         using namespace juce::gl;
 
         if (rasterBuffer.resolution != viewportSize * supersample) {
-            rasterBuffer = BackBuffer{ viewportSize * supersample, true };
-            compositingBuffer = BackBuffer{ viewportSize, false };
-            bufferA = BackBuffer{ viewportSize, false };
-            bufferB = BackBuffer{ viewportSize, false };
+            rasterBuffer = GLBackBuffer{ viewportSize * supersample, true };
+            compositingBuffer = GLBackBuffer{ viewportSize, false };
+            bufferA = GLBackBuffer{ viewportSize, false };
+            bufferB = GLBackBuffer{ viewportSize, false };
         }
     }
 
@@ -483,7 +483,7 @@ struct PostProcess {
             jassertfalse; // Unhandled bloom downsampling ratio
         }
 
-        BackBuffer const *vertical{ &bufferA }, *horizontal{ &bufferB };
+        GLBackBuffer const *vertical{ &bufferA }, *horizontal{ &bufferB };
         juce::Point<int> bloomDownsampleBounds{ vertical->resolution };
 
         for (int pass{ 0 }; ; ++pass) {
@@ -611,8 +611,8 @@ private:
         gaussianShader,
         bloomAccumulateShader;
 
-    std::optional<Mesh> gridFloor;
-    std::optional<Mesh> ball;
+    std::optional<GLMesh> gridFloor;
+    std::optional<GLMesh> ball;
 
     // Relative window mouse position [-1, 1]
     std::optional<juce::Time> mouseEntered;
