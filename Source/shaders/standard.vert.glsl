@@ -17,6 +17,6 @@ out vec2 vTexCoord;
 void main() {
     vColor = aColor;
     vTexCoord = aTexCoord;
-    vWorldPosition = aPosition;
+    vWorldPosition = (modelMatrix * vec4(aPosition, 1.0)).xyz;
     gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(aPosition, 1.0);
 }

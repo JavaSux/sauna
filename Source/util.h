@@ -120,6 +120,25 @@ struct Vec3 {
     }
 };
 
+template<typename T>
+static inline void scaleMatrix(juce::Matrix3D<T> &matrix, T scale) {
+	matrix.mat[0] *= scale;
+	matrix.mat[5] *= scale;
+	matrix.mat[10] *= scale;
+}
+
+template<typename T>
+static inline juce::Matrix3D<T> scaledMatrix(juce::Matrix3D<T> matrix, T scale) {
+	scaleMatrix(matrix, scale);
+	return matrix;
+}
+
+template<typename T>
+static inline void positionMatrix(juce::Matrix3D<T> &matrix, juce::Vector3D<T> position) {
+	matrix.mat[12] = position.x;
+	matrix.mat[13] = position.y;
+	matrix.mat[14] = position.z;
+}
 
 #pragma warning(disable: 4505) // MSVC allow unused
 static void steam_assert(IPLerror status, std::string_view description) {

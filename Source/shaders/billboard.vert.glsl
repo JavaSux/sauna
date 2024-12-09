@@ -19,11 +19,11 @@ void main() {
 
     mat4 modelView = viewMatrix * modelMatrix;
 
-    // Reset rotation mat3 to identity
+    // Maybe wrong, not sure how to handle W component
     mat4 billboard = mat4(
-        vec4(1.0, 0.0, 0.0, modelView[0][3]),
-        vec4(0.0, 1.0, 0.0, modelView[1][3]),
-        vec4(0.0, 0.0, 1.0, modelView[2][3]),
+        modelMatrix[0],
+        modelMatrix[1],
+        modelMatrix[3],
         modelView[3]
     );
 

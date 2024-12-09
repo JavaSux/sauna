@@ -12,14 +12,16 @@ void ViewportComponent::initialise() {
 
     gridFloorShader = loadShader(openGLContext, BinaryData::standard_vert_glsl, BinaryData::gridfloor_frag_glsl, "gridFloorShader");  
     gridFloor.emplace(
-        GLBufferHandle::quad(6.0, juce::Colour::fromHSV(0.1f, 0.75f, 1.0f, 1.0f)),  
-        gridFloorShader  
+        GLMesh::quad(juce::Colour::fromHSV(0.1f, 0.75f, 1.0f, 1.0f)),  
+        gridFloorShader,
+        scaledMatrix(juce::Matrix3D<float>(), 3.0f)
     );  
 
     ballShader = loadShader(openGLContext, BinaryData::billboard_vert_glsl, BinaryData::ball_frag_glsl, "ballShader");  
     ball.emplace(  
-        GLBufferHandle::quad(0.5f, juce::Colours::white),  
-        ballShader  
+        GLMesh::quad(juce::Colours::white),  
+        ballShader,
+		scaledMatrix(juce::Matrix3D<float>(), 0.25f)
     );  
 
     downsampleShader      = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::downsample_frag_glsl, "downsampleShader");  
@@ -59,11 +61,10 @@ void ViewportComponent::update() {
 
     float elapsed = static_cast<float>((now - startTime).inSeconds());
     if (ball)
-        ball->modelMatrix = juce::Matrix3D<float>::fromTranslation({
-            std::sin(elapsed / 4.0f),
-            std::cos(elapsed / 4.0f),
-            0.0f
-        });
+        positionMatrix(
+            ball->modelMatrix,
+            juce::Vector3D(std::sin(elapsed / 4.0f), std::cos(elapsed / 4.0f), 0.0f)
+        );
 
     lastUpdateTime = now;
 }
@@ -104,7 +105,7 @@ void ViewportComponent::render() {
         return radius * pivot * lift;
     }() };
 
-    const auto draw{ [&projectionMatrix, &viewMatrix](GLMesh const &mesh) {
+    const auto draw{ [&projectionMatrix, &viewMatrix](GLMeshObject const &mesh) {
         mesh.shader->use();
 
         if (mesh.uniforms.projectionMatrix.uniformID >= 0) {
@@ -117,11 +118,11 @@ void ViewportComponent::render() {
             mesh.uniforms.modelMatrix.setMatrix4(mesh.modelMatrix.mat, 1, false);
         }
 
-        glBindBuffer(GL_ARRAY_BUFFER, mesh.bufferHandle.vertexBuffer);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.bufferHandle.indexBuffer);
+        glBindBuffer(GL_ARRAY_BUFFER, mesh.mesh.vertexBuffer);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.mesh.indexBuffer);
 
         mesh.attribs.enable();
-        mesh.bufferHandle.drawElements();
+        mesh.mesh.drawElements();
         mesh.attribs.disable();
     } };
 

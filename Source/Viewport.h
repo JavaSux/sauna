@@ -107,17 +107,17 @@ struct GLMeshUniforms {
 };
 
 
-struct GLBufferHandle {
+struct GLMesh {
     bool owning;
     GLuint vertexBuffer, indexBuffer;
     GLsizei numIndices;
 
-    GLBufferHandle() = delete;
-    GLBufferHandle(GLBufferHandle const &) = delete;
-    GLBufferHandle &operator=(GLBufferHandle &) = delete;
+    GLMesh() = delete;
+    GLMesh(GLMesh const &) = delete;
+    GLMesh &operator=(GLMesh &) = delete;
 
-    GLBufferHandle(GLBufferHandle &&other) noexcept {
-        this->~GLBufferHandle();
+    GLMesh(GLMesh &&other) noexcept {
+        this->~GLMesh();
 
         owning = other.owning;
         vertexBuffer = other.vertexBuffer;
@@ -127,7 +127,7 @@ struct GLBufferHandle {
         other.owning = false;
     }
 
-    GLBufferHandle(std::span<const GLVertex> vertices, std::span<const GLuint> indices) :
+    GLMesh(std::span<const GLVertex> vertices, std::span<const GLuint> indices) :
         owning{ true },
         numIndices{ static_cast<GLsizei>(indices.size()) }
     {
@@ -151,14 +151,14 @@ struct GLBufferHandle {
         OPENGL_ASSERT();
     }
 
-    ~GLBufferHandle() {
+    ~GLMesh() {
         if (owning) {
             juce::gl::glDeleteBuffers(1, &vertexBuffer);
             juce::gl::glDeleteBuffers(1, &indexBuffer);
         }
     }
 
-    GLBufferHandle &operator=(GLBufferHandle &&other) noexcept {
+    GLMesh &operator=(GLMesh &&other) noexcept {
         owning = other.owning;
         vertexBuffer = other.vertexBuffer;
         indexBuffer = other.indexBuffer;
@@ -169,8 +169,8 @@ struct GLBufferHandle {
         return *this;
     }
 
-    static GLBufferHandle quad(float size, juce::Colour const &color) {
-        float scale = size / 2.0f;
+    static GLMesh quad(juce::Colour const &color) {
+        constexpr float SCALE = 1.0f;
 
         std::array<float, 4> colorRaw{
             color.getFloatRed(),
@@ -180,22 +180,22 @@ struct GLBufferHandle {
         };
         std::vector<GLVertex> vertices{
             GLVertex{
-                .position = { -scale, -scale, 0.0f },
+                .position = { -SCALE, -SCALE, 0.0f },
                 .colour = colorRaw,
                 .texCoord = { 0.0, 0.0 }
         },
             GLVertex{
-                .position = { scale, -scale, 0.0f },
+                .position = { SCALE, -SCALE, 0.0f },
                 .colour = colorRaw,
                 .texCoord = { 1.0, 0.0 }
         },
             GLVertex{
-                .position = { -scale, scale, 0.0f },
+                .position = { -SCALE, SCALE, 0.0f },
                 .colour = colorRaw,
                 .texCoord = { 0.0, 1.0 }
         },
             GLVertex{
-                .position = { scale, scale, 0.0f },
+                .position = { SCALE, SCALE, 0.0f },
                 .colour = colorRaw,
                 .texCoord = { 1.0, 1.0 }
         }
@@ -208,37 +208,44 @@ struct GLBufferHandle {
         return { vertices, indices };
 	}
 
+    static GLMesh icosphere(int subdivisions, juce::Colour const &color) {
+        std::vector<GLVertex> vertices;
+        std::vector<GLuint> indices;
+
+
+    }
+
 	void drawElements() const {
         juce::gl::glDrawElements(juce::gl::GL_TRIANGLES, numIndices, juce::gl::GL_UNSIGNED_INT, nullptr);
     }
 };
 
 
-struct GLMesh {
-    GLBufferHandle bufferHandle;
+struct GLMeshObject {
+    GLMesh mesh;
     std::shared_ptr<juce::OpenGLShaderProgram> shader;
     GLVertexAttributes attribs;
     GLMeshUniforms uniforms;
     juce::Matrix3D<float> modelMatrix;
 
-    GLMesh() = delete;
-    GLMesh(GLMesh const &) = delete;
-    GLMesh &operator=(GLMesh const &) = delete;
+    GLMeshObject() = delete;
+    GLMeshObject(GLMeshObject const &) = delete;
+    GLMeshObject &operator=(GLMeshObject const &) = delete;
 
-    GLMesh(
-        GLBufferHandle &&handle,
+    GLMeshObject(
+        GLMesh &&handle,
         std::shared_ptr<juce::OpenGLShaderProgram> &shader,
         juce::Matrix3D<float> modelMatrix = {}
     ) noexcept : 
-        bufferHandle{ std::move(handle) },
+        mesh{ std::move(handle) },
         attribs{ *shader },
         uniforms{ *shader },
         shader{ shader },
         modelMatrix{ modelMatrix }
     {}
-    GLMesh(GLMesh &&) noexcept = default;
-    GLMesh &operator=(GLMesh &&) noexcept = default;
-    ~GLMesh() = default;
+    GLMeshObject(GLMeshObject &&) noexcept = default;
+    GLMeshObject &operator=(GLMeshObject &&) noexcept = default;
+    ~GLMeshObject() = default;
 };
 
 
@@ -352,7 +359,7 @@ struct GLBackBuffer {
 struct PostProcess {
     using Uniform = juce::OpenGLShaderProgram::Uniform;
 
-    GLBufferHandle fullscreenQuad;
+    GLMesh fullscreenQuad;
 
     GLBackBuffer 
         rasterBuffer, 
@@ -396,7 +403,7 @@ struct PostProcess {
         juce::Point<int> viewportSize,
         int supersample
     ) noexcept :
-        fullscreenQuad{ GLBufferHandle::quad(2.0, juce::Colours::black) },
+        fullscreenQuad{ GLMesh::quad(juce::Colours::black) },
         downsampleAttribs{ *downsampleShader },
         cinematicAttribs{ *cinematicShader },
 		gaussianAttribs{ *gaussianShader },
@@ -611,8 +618,8 @@ private:
         gaussianShader,
         bloomAccumulateShader;
 
-    std::optional<GLMesh> gridFloor;
-    std::optional<GLMesh> ball;
+    std::optional<GLMeshObject> gridFloor;
+    std::optional<GLMeshObject> ball;
 
     // Relative window mouse position [-1, 1]
     std::optional<juce::Time> mouseEntered;
