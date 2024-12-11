@@ -14,6 +14,7 @@ struct Vec3 {
     constexpr Vec3() : x{ 0.0f }, y{ 0.0f }, z{ 0.0f } {}
     constexpr Vec3(float value) : x{ value }, y{ value }, z{ value } {}
     constexpr Vec3(float x, float y, float z) : x{ x }, y{ y }, z{ z } {}
+	constexpr Vec3(std::array<float, 3> const &array) : x{ array[0] }, y{ array[1] }, z{ array[2] } {}
     constexpr Vec3(IPLVector3 const &steam) :
         x{  steam.x },
         y{ -steam.z },
@@ -50,6 +51,10 @@ struct Vec3 {
         return juce::Vector3D<float>{ x, y, z };
     }
 
+	std::array<float, 3> toArray() const {
+		return { x, y, z };
+	}
+
     constexpr bool hasDirection() const {
         return *this != Vec3{};
     }
@@ -74,9 +79,9 @@ struct Vec3 {
 
     constexpr Vec3 cross(Vec3 const &other) const {
         return Vec3{
-            y * other.z - z * other.y,
+             (y * other.z - z * other.y),
             -(x * other.z - z * other.x),
-            (x * other.y - y * other.x)
+             (x * other.y - y * other.x)
         };
     }
 
@@ -101,6 +106,10 @@ struct Vec3 {
     constexpr Vec3 operator/(float value) const {
         return Vec3{ x / value, y / value, z / value };
     }
+
+	constexpr Vec3 operator-(Vec3 const &other) const {
+		return Vec3{ x - other.x, y - other.y, z - other.z };
+	}
 
     constexpr Vec3 operator+(Vec3 const &other) const {
         return Vec3{ x + other.x, y + other.y, z + other.z };

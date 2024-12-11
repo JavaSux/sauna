@@ -18,16 +18,23 @@ void ViewportComponent::initialise() {
     );  
 
     ballShader = loadShader(openGLContext, BinaryData::billboard_vert_glsl, BinaryData::ball_frag_glsl, "ballShader");  
-    ball.emplace(  
+    ball.emplace(
         GLMesh::quad(juce::Colours::white),  
         ballShader,
 		scaledMatrix(juce::Matrix3D<float>(), 0.25f)
-    );  
+    );
+
+    meshDebugShader       = loadShader(openGLContext, BinaryData::standard_vert_glsl,    BinaryData::shownormals_frag_glsl, "meshDebugShader");
+	icosphere.emplace(
+		GLMesh::icosphere(1, juce::Colours::white),
+		meshDebugShader,
+		scaledMatrix(juce::Matrix3D<float>(), 0.5f)
+	);
 
     downsampleShader      = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::downsample_frag_glsl, "downsampleShader");  
     cinematicShader       = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::cinematic_frag_glsl, "cinematicShader");  
     gaussianShader        = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::gaussian_frag_glsl, "gaussianShader");  
-    bloomAccumulateShader = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::bloomAccumulate_frag_glsl, "bloomAccumulateShader");  
+    bloomAccumulateShader = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::bloomAccumulate_frag_glsl, "bloomAccumulateShader");
     postprocess.emplace(  
         downsampleShader,  
         cinematicShader,  
@@ -140,6 +147,7 @@ void ViewportComponent::render() {
     juce::OpenGLHelpers::clear(CLEAR_COLOR);
 
     draw(ball.value());
+	draw(icosphere.value());
 
     // Additive rendering
     glEnable(GL_BLEND);

@@ -107,6 +107,74 @@ struct GLMeshUniforms {
 };
 
 
+struct FaceCollector {
+    std::vector<Vec3> vertices{};
+    std::vector<GLuint> indices{};
+
+    FaceCollector(FaceCollector &&other) noexcept {
+		vertices = std::move(other.vertices);
+		indices = std::move(other.indices);
+    };
+    FaceCollector() = default;
+
+	FaceCollector const &operator=(FaceCollector const &) = delete;
+	FaceCollector &operator=(FaceCollector &&) noexcept = default;
+
+    std::span<Vec3, 3> getFace(size_t face) {
+        auto offset = static_cast<size_t>(indices[face * 3]);
+        return std::span<Vec3, 3>{ vertices.begin() + offset, 3 };
+    }
+
+    void addTriangle(
+        Vec3 const &a,
+        Vec3 const &b,
+        Vec3 const &c
+    ) {
+        auto index{ static_cast<GLuint>(vertices.size()) };
+        vertices.push_back(a);
+		vertices.push_back(b);
+		vertices.push_back(c);
+        indices.push_back(index + 0);
+        indices.push_back(index + 1);
+        indices.push_back(index + 2);
+    }
+
+	std::vector<GLVertex> toVertices(juce::Colour const &color) const {
+		std::array<float, 4> colorRaw{
+			color.getFloatRed(),
+			color.getFloatGreen(),
+			color.getFloatBlue(),
+			color.getFloatAlpha()
+		};
+
+		std::vector<GLVertex> result;
+		result.reserve(vertices.size());
+
+        auto faces = vertices.size() / 3;
+        for (size_t face{ 0 }; face < faces; face++) {
+            Vec3
+                a{ vertices[face * 3 + 0] },
+				b{ vertices[face * 3 + 1] },
+				c{ vertices[face * 3 + 2] },
+                normal{ (b - a).cross(c - a).normalized() };
+
+            auto vertex{ [&](Vec3 const &position, std::array<float, 2> uv) -> GLVertex {
+                return GLVertex{
+                    .position = position.toArray(),
+                    .normal = normal.toArray(),
+                    .colour = colorRaw,
+                    .texCoord = uv
+                };
+            }};
+
+            result.push_back(vertex(a, { 0.0f, 0.0f }));
+            result.push_back(vertex(b, { 1.0f, 0.0f }));
+            result.push_back(vertex(c, { 0.0f, 1.0f }));
+		}
+		return result;
+	}
+};
+
 struct GLMesh {
     bool owning;
     GLuint vertexBuffer, indexBuffer;
@@ -178,27 +246,19 @@ struct GLMesh {
             color.getFloatBlue(),
             color.getFloatAlpha()
         };
+		auto vertex = [&colorRaw](std::array<float, 2> xy, std::array<float, 2> uv) {
+			return GLVertex{
+				.position = { xy[0] * SCALE, xy[1] * SCALE, 0.0f },
+				.normal = { 0.0f, 0.0f, 1.0f },
+				.colour = colorRaw,
+				.texCoord = uv,
+			};
+		};
         std::vector<GLVertex> vertices{
-            GLVertex{
-                .position = { -SCALE, -SCALE, 0.0f },
-                .colour = colorRaw,
-                .texCoord = { 0.0, 0.0 }
-        },
-            GLVertex{
-                .position = { SCALE, -SCALE, 0.0f },
-                .colour = colorRaw,
-                .texCoord = { 1.0, 0.0 }
-        },
-            GLVertex{
-                .position = { -SCALE, SCALE, 0.0f },
-                .colour = colorRaw,
-                .texCoord = { 0.0, 1.0 }
-        },
-            GLVertex{
-                .position = { SCALE, SCALE, 0.0f },
-                .colour = colorRaw,
-                .texCoord = { 1.0, 1.0 }
-        }
+            vertex({-1, -1}, {0.0, 0.0}),
+			vertex({ 1, -1}, {1.0, 0.0}),
+			vertex({-1,  1}, {0.0, 1.0}),
+            vertex({ 1,  1}, {1.0, 1.0}),
         };
         std::vector<GLuint> indices{
             0, 1, 2,
@@ -209,14 +269,94 @@ struct GLMesh {
 	}
 
     static GLMesh icosphere(int subdivisions, juce::Colour const &color) {
+        // http://blog.andreaskahler.com/2009/06/creating-icosphere-mesh-in-code.html
+
         std::vector<GLVertex> vertices;
         std::vector<GLuint> indices;
 
+        // create 12 vertices of a icosahedron
+        float t = (1.0f + std::sqrt(5.0f)) / 2.0f;
+        auto icosphere = FaceCollector{};
 
+        std::array<Vec3, 12> planes = {
+            Vec3{ -1,  t,  0 }, // 0
+            Vec3{  1,  t,  0 }, // 1
+            Vec3{ -1, -t,  0 }, // 2
+            Vec3{  1, -t,  0 }, // 3
+
+            Vec3{  0, -1,  t }, // 4
+            Vec3{  0,  1,  t }, // 5
+            Vec3{  0, -1, -t }, // 6
+            Vec3{  0,  1, -t }, // 7
+
+            Vec3{  t,  0, -1 }, // 8
+            Vec3{  t,  0,  1 }, // 9
+            Vec3{ -t,  0, -1 }, // 10
+            Vec3{ -t,  0,  1 } // 11
+        };
+
+		std::array<int, 60> faces = {
+			 0, 11,  5,
+			 0,  5,  1,
+			 0,  1,  7,
+			 0,  7, 10,
+			 0, 10, 11,
+			 1,  5,  9,
+			 5, 11,  4,
+			11, 10,  2,
+			10,  7,  6,
+			 7,  1,  8,
+			 3,  9,  4,
+			 3,  4,  2,
+			 3,  2,  6,
+			 3,  6,  8,
+			 3,  8,  9,
+			 4,  9,  5,
+			 2,  4, 11,
+			 6,  2, 10,
+			 8,  6,  7,
+			 9,  8,  1,
+		};
+
+        for (int face{ 0 }; face < 20; face++) {
+            icosphere.addTriangle(
+                planes[faces[face * 3 + 0]].normalized(),
+                planes[faces[face * 3 + 1]].normalized(),
+                planes[faces[face * 3 + 2]].normalized()
+            );
+		}
+
+        auto subdivided = FaceCollector{};
+		for (int i{ 0 }; i < subdivisions; i++) {
+			for (size_t face{ 0 }; face < icosphere.indices.size() / 3; face += 1) {
+				auto face_ref = icosphere.getFace(face);
+				Vec3
+                    a{ face_ref[0] },
+                    b{ face_ref[1] },
+                    c{ face_ref[2] },
+                    ab{ ((a + b) / 2.0f).normalized() },
+                    bc{ ((b + c) / 2.0f).normalized() },
+                    ca{ ((c + a) / 2.0f).normalized() };
+
+				subdivided.addTriangle(a, ab, ca);
+				subdivided.addTriangle(b, bc, ab);
+				subdivided.addTriangle(c, ca, bc);
+				subdivided.addTriangle(ab, bc, ca);
+			}
+			icosphere = std::move(subdivided);
+            subdivided = FaceCollector{};
+		}
+
+		return { icosphere.toVertices(color), icosphere.indices };
     }
 
 	void drawElements() const {
-        juce::gl::glDrawElements(juce::gl::GL_TRIANGLES, numIndices, juce::gl::GL_UNSIGNED_INT, nullptr);
+        juce::gl::glDrawElements(
+            juce::gl::GL_TRIANGLES, 
+            numIndices,
+            juce::gl::GL_UNSIGNED_INT, 
+            nullptr
+        );
     }
 };
 
@@ -616,10 +756,13 @@ private:
         downsampleShader,
         cinematicShader,
         gaussianShader,
-        bloomAccumulateShader;
+        bloomAccumulateShader,
+        meshDebugShader;
 
-    std::optional<GLMeshObject> gridFloor;
-    std::optional<GLMeshObject> ball;
+    std::optional<GLMeshObject>
+        gridFloor,
+        ball,
+        icosphere;
 
     // Relative window mouse position [-1, 1]
     std::optional<juce::Time> mouseEntered;
