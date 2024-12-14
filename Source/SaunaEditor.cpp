@@ -29,13 +29,13 @@ void ControlPanelComponent::paint(juce::Graphics &graphics) {
 }
 
 
-SaunaEditor::SaunaEditor(SaunaProcessor &p) :
-    AudioProcessorEditor{ &p },
-    audioProcessor{ p },
-    viewport{ viewportFrame.viewport },
-	controlPanel{ p },
+SaunaEditor::SaunaEditor(SaunaProcessor &processor) :
+    AudioProcessorEditor{ &processor },
+    audioProcessor{ processor },
+	controlPanel{ processor },
     constrainer{},
-    resizer{ this, &constrainer }
+    resizer{ this, &constrainer },
+	viewportFrame{ processor.getPluginState() }
 {
     setSize(800, 600);
     setTitle("Sauna");

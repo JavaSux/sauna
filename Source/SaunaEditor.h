@@ -11,8 +11,9 @@ struct ViewportFrameComponent: juce::Component {
     juce::DropShadow dropShadow;
     ViewportComponent viewport;
 
-    ViewportFrameComponent() :
-        dropShadow{ juce::Colour::fromFloatRGBA(0.0f, 0.0f, 0.0f, 0.6f), 4, { 0, 2 } }
+    ViewportFrameComponent(SaunaControls const &pluginState) :
+        dropShadow{ juce::Colour::fromFloatRGBA(0.0f, 0.0f, 0.0f, 0.6f), 4, { 0, 2 } },
+        viewport{ pluginState }
     {
         addAndMakeVisible(viewport);
         roundRectPath.addRoundedRectangle(0.0f, 0.0f, static_cast<float>(getWidth()), static_cast<float>(getHeight()) , 3.0f);
@@ -67,7 +68,6 @@ private:
 	juce::ComponentBoundsConstrainer constrainer;
     juce::ResizableCornerComponent resizer;
 	ViewportFrameComponent viewportFrame;
-    ViewportComponent &viewport;
 	ControlPanelComponent controlPanel;
 
     JUCE_LEAK_DETECTOR(SaunaEditor)

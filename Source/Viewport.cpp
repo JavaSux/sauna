@@ -1,8 +1,10 @@
 #include "Viewport.h"
+#include "SaunaControls.h"
 
 const juce::Point<float> ViewportComponent::INITIAL_MOUSE{ 0.5f, 0.6f };
 const juce::Colour ViewportComponent::CLEAR_COLOR = juce::Colours::black;
 const double ViewportComponent::MOUSE_DELAY = 0.4;
+const float ICOSPHERE_SCALE = 0.2;
 
 void ViewportComponent::initialise() {
     // May be called mulitple times by the parent
@@ -14,21 +16,21 @@ void ViewportComponent::initialise() {
     gridFloor.emplace(
         GLMesh::quad(juce::Colour::fromHSV(0.1f, 0.75f, 1.0f, 1.0f)),  
         gridFloorShader,
-        scaledMatrix(juce::Matrix3D<float>(), 3.0f)
+        rotationTranslationScale({}, {}, 3.0f)
     );  
 
     ballShader = loadShader(openGLContext, BinaryData::billboard_vert_glsl, BinaryData::ball_frag_glsl, "ballShader");  
     ball.emplace(
         GLMesh::quad(juce::Colours::white),  
         ballShader,
-		scaledMatrix(juce::Matrix3D<float>(), 0.25f)
+        rotationTranslationScale({}, {}, 0.125f)
     );
 
-    meshDebugShader       = loadShader(openGLContext, BinaryData::standard_vert_glsl,    BinaryData::shownormals_frag_glsl, "meshDebugShader");
+    icosphereShader = loadShader(openGLContext, BinaryData::standard_vert_glsl, BinaryData::icosphere_frag_glsl, "meshDebugShader");
 	icosphere.emplace(
 		GLMesh::icosphere(1, juce::Colours::white),
-		meshDebugShader,
-		scaledMatrix(juce::Matrix3D<float>(), 0.5f)
+		icosphereShader,
+        rotationTranslationScale({}, {}, ICOSPHERE_SCALE)
 	);
 
     downsampleShader      = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::downsample_frag_glsl, "downsampleShader");  
@@ -58,20 +60,24 @@ void ViewportComponent::update() {
     repaint(); // Request
     juce::Time now = juce::Time::getCurrentTime();
 
+    float delta = static_cast<float>((now - lastUpdateTime).inSeconds());
+    float elapsed = static_cast<float>((now - startTime).inSeconds());
+
     if (
         (smoothMouse - INITIAL_MOUSE).getDistanceFromOrigin() > 0.0001
         || mouseEntered && (now - *mouseEntered).inSeconds() > MOUSE_DELAY
     ) {
-        float delta = static_cast<float>((now - lastUpdateTime).inSeconds());
+        
         smoothMouse = expEase(smoothMouse, mousePosition, 16.0, delta);
     }
 
-    float elapsed = static_cast<float>((now - startTime).inSeconds());
-    if (ball)
-        positionMatrix(
-            ball->modelMatrix,
-            juce::Vector3D(std::sin(elapsed / 4.0f), std::cos(elapsed / 4.0f), 0.0f)
+    if (icosphere) {
+        icosphere->modelMatrix = rotationTranslationScale(
+            Vec3{ 0.0f, 0.0f, elapsed * 1.0f },
+            pluginState.getLastPosition(),
+            ICOSPHERE_SCALE
         );
+    }
 
     lastUpdateTime = now;
 }
@@ -97,7 +103,6 @@ void ViewportComponent::render() {
 
     juce::Matrix3D<float> viewMatrix{ [this]() {
         const float pi = juce::MathConstants<float>::pi;
-        const float pi_2 = pi / 2.0;
 
         juce::Matrix3D<float> radius = juce::Matrix3D<float>::fromTranslation({ 0.0f, 0.0f, -5.0f });
         juce::Matrix3D<float> pivot = radius.rotation({
@@ -105,8 +110,8 @@ void ViewportComponent::render() {
             (1.0f - smoothMouse.y) * -pi,
             0.0f,
             // Turntable
-            (smoothMouse.x * 2.0f + 1.0f) * pi_2
-            });
+            pi + (smoothMouse.x * 2.0f + 1.0f) * pi / 2.0f
+        });
 
         juce::Matrix3D<float> lift = juce::Matrix3D<float>::fromTranslation({ 0.0f, 0.0f, -0.25f });
         return radius * pivot * lift;

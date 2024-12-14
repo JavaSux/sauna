@@ -3,6 +3,7 @@
 in vec3 vWorldPosition;
 in vec4 vColor;
 in vec2 vTexCoord;
+in float vScreenFacing;
 
 out vec4 fragColor;
 
@@ -68,11 +69,12 @@ void main() {
     vec2 small = alphaOverDim(dots(subtiles), lines(subtiles), 0.5);
 
     float texelDensity = length(dFdy(vWorldPosition.xy));
-    float minorFade = square(1.0 - clamp(texelDensity * 40.0, 0.0, 1.0));
-    float majorFade = square(1.0 - clamp(texelDensity * 12.0, 0.0, 1.0));
+    float facing = abs(vScreenFacing);
+    float minorFade = clamp(facing * 2.0, 0.0, 1.0);
+    float majorFade = clamp(facing * 4.0, 0.0, 1.0);
 
     vec2 combined = alphaOverDim(big, small, minorFade * 0.5);
     float value = combined.x * combined.y * spotlight(vTexCoord) * majorFade;
-
+    
     fragColor = vec4(vColor.rgb * value * BRIGHTNESS, 1.0);
 }

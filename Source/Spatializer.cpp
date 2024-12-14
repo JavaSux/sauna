@@ -38,7 +38,7 @@ BinauralEffect::~BinauralEffect() {
 }
 
 void BinauralEffect::setParams(Vec3 direction) {
-    params.direction = (direction.hasDirection() ? direction : DEFAULT_SOURCE_POSITION).toSteam();
+    params.direction = (direction.isOrigin() ? DEFAULT_SOURCE_POSITION : direction).toSteam();
 }
 
 void BinauralEffect::processBlock(IPLAudioBuffer &input, IPLAudioBuffer &output) {

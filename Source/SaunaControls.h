@@ -23,7 +23,8 @@ struct SaunaControls {
 	SaunaControls(SaunaControls const &) = delete;
 	~SaunaControls() = default;
 
-	Vec3 getPositionFor(float time) const;
+	Vec3 updatePosition(float time);
+	Vec3 getLastPosition() const { return lastPosition; }
 	float getMinDistance() const;
 
 private:
@@ -49,6 +50,6 @@ private:
 	std::vector<PathNode> nodes{};
 	unsigned int currentNode{};
 
-	
+	Vec3 lastPosition{};
 	Vec3 orbit(float time) const;
 };

@@ -55,8 +55,8 @@ struct Vec3 {
 		return { x, y, z };
 	}
 
-    constexpr bool hasDirection() const {
-        return *this != Vec3{};
+    constexpr bool isOrigin() const {
+        return *this == Vec3{};
     }
 
     constexpr Vec3 axisAngleRotate(Vec3 const &axis, float angle) const {
@@ -130,20 +130,35 @@ struct Vec3 {
 };
 
 template<typename T>
-static inline void scaleMatrix(juce::Matrix3D<T> &matrix, T scale) {
-	matrix.mat[0] *= scale;
-	matrix.mat[5] *= scale;
-	matrix.mat[10] *= scale;
+static inline juce::Matrix3D<T> rotationTranslationScale(
+	Vec3 rotation,
+	Vec3 translation,
+	T scale
+) {
+	if (rotation.isOrigin()) {
+		return {
+			scale, 0, 0, 0,
+			0, scale, 0, 0,
+			0, 0, scale, 0,
+			translation.x, translation.y, translation.z, T{1}
+		};
+    } else {
+        T
+            cx = std::cos(rotation.x), sx = std::sin(rotation.x),
+            cy = std::cos(rotation.y), sy = std::sin(rotation.y),
+            cz = std::cos(rotation.z), sz = std::sin(rotation.z);
+
+        return {
+            scale * ((cy * cz) + (sx * sy * sz)), scale * cx * sz, scale * ((cy * sx * sz) - (cz * sy)), 0,
+            scale * ((cz * sx * sy) - (cy * sz)), scale * cx * cz, scale * ((cy * cz * sx) + (sy * sz)), 0,
+            scale * cx * sy, scale * -sx, scale * cx * cy, 0,
+            translation.x, translation.y, translation.z, T{1}
+        };
+    }
 }
 
 template<typename T>
-static inline juce::Matrix3D<T> scaledMatrix(juce::Matrix3D<T> matrix, T scale) {
-	scaleMatrix(matrix, scale);
-	return matrix;
-}
-
-template<typename T>
-static inline void positionMatrix(juce::Matrix3D<T> &matrix, juce::Vector3D<T> position) {
+static inline void translateMatrix(juce::Matrix3D<T> &matrix, juce::Vector3D<T> position) {
 	matrix.mat[12] = position.x;
 	matrix.mat[13] = position.y;
 	matrix.mat[14] = position.z;

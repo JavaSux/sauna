@@ -90,7 +90,7 @@ void SaunaProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::MidiBu
         auto playheadPosition = playHead.load()->getPosition();
         double time = playheadPosition.hasValue() ? playheadPosition->getTimeInSeconds().orFallback(0.0) : 0.0;
 
-        auto position = pluginState.getPositionFor(static_cast<float>(time));
+        auto position = pluginState.updatePosition(static_cast<float>(time));
 
         spatializer.value()
             .setParams(position, pluginState.getMinDistance())

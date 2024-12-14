@@ -8,7 +8,7 @@ struct SaunaProcessor: juce::AudioProcessor {
     SaunaProcessor();
     ~SaunaProcessor() override;
     SaunaProcessor(SaunaProcessor const &) = delete;
-    SaunaProcessor & operator= (SaunaProcessor const &) = delete;
+    SaunaProcessor & operator=(SaunaProcessor const &) = delete;
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
@@ -33,6 +33,8 @@ struct SaunaProcessor: juce::AudioProcessor {
 
     void getStateInformation(juce::MemoryBlock& destData) override;
     void setStateInformation(const void *data, int sizeInBytes) override;
+
+	SaunaControls const &getPluginState() const { return pluginState; }
 
 private:
     IPLContext steam_audio_context{};

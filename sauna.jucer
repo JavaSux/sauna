@@ -7,8 +7,8 @@
               defines="JUCE_DONT_ASSERT_ON_GLSL_COMPILE_ERROR=true">
   <MAINGROUP id="Cnakd6" name="sauna">
     <GROUP id="{A308CA9A-A6E5-3033-F59A-5C3A1692B764}" name="shaders">
-      <FILE id="UqDwXi" name="shownormals.frag.glsl" compile="0" resource="1"
-            file="Source/shaders/shownormals.frag.glsl"/>
+      <FILE id="UqDwXi" name="icosphere.frag.glsl" compile="0" resource="1"
+            file="Source/shaders/icosphere.frag.glsl"/>
       <FILE id="RsW0bm" name="bloomAccumulate.frag.glsl" compile="0" resource="1"
             file="Source/shaders/bloomAccumulate.frag.glsl"/>
       <FILE id="Wf4wAM" name="gaussian.frag.glsl" compile="0" resource="1"

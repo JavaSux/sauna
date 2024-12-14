@@ -6,6 +6,8 @@
 
 #include "util.h"
 
+struct SaunaControls;
+
 constexpr int RASTER_SUPERSAMPLE = 2;
 constexpr int BLOOM_PASSES = 7; // Downsampling means that higher pass counts are cheap
 constexpr int BLOOM_DOWNSAMPLE = 2;
@@ -432,6 +434,8 @@ struct GLBackBuffer {
         glTexImage2D(GL_TEXTURE_2D, 0, GL_R11F_G11F_B10F, resolution.x, resolution.y, 0, GL_RGB, GL_FLOAT, nullptr);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glBindTexture(GL_TEXTURE_2D, 0);
 
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, outputTexture, 0);
@@ -716,7 +720,8 @@ struct ViewportComponent: juce::OpenGLAppComponent {
     ViewportComponent(ViewportComponent const &) = delete;
     ViewportComponent &operator=(ViewportComponent const &) = delete;
 
-    ViewportComponent() :
+    ViewportComponent(SaunaControls const &pluginState) :
+		pluginState{ pluginState },
         juce::OpenGLAppComponent{},
         gridFloorShader{ nullptr },
         startTime{ juce::Time::getCurrentTime() },
@@ -742,6 +747,7 @@ struct ViewportComponent: juce::OpenGLAppComponent {
     void mouseExit(juce::MouseEvent const &) override;
 
 private:
+	SaunaControls const &pluginState;
     juce::VBlankAttachment vBlankTimer;
     juce::Time startTime;
     juce::Time lastUpdateTime;
@@ -757,7 +763,7 @@ private:
         cinematicShader,
         gaussianShader,
         bloomAccumulateShader,
-        meshDebugShader;
+        icosphereShader;
 
     std::optional<GLMeshObject>
         gridFloor,
