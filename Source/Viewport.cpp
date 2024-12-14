@@ -6,37 +6,50 @@ const juce::Colour ViewportComponent::CLEAR_COLOR = juce::Colours::black;
 const double ViewportComponent::MOUSE_DELAY = 0.4;
 const float ICOSPHERE_SCALE = 0.2;
 
+ViewportComponent::ViewportComponent(SaunaControls const &pluginState) :
+    pluginState{ pluginState },
+    juce::OpenGLAppComponent{},
+    gridFloorShader{ nullptr },
+    startTime{ juce::Time::getCurrentTime() },
+    lastUpdateTime{ startTime },
+    vBlankTimer{ this, [this](){ update(); } }
+{};
+
+ViewportComponent::~ViewportComponent() {
+    shutdownOpenGL();
+}
+
 void ViewportComponent::initialise() {
     // May be called mulitple times by the parent
     DBG("Initializing ViewportComponent resources");
 
     recomputeViewportSize();
 
-    gridFloorShader = loadShader(openGLContext, BinaryData::standard_vert_glsl, BinaryData::gridfloor_frag_glsl, "gridFloorShader");  
+    if (!gridFloorShader) gridFloorShader = loadShader(openGLContext, BinaryData::standard_vert_glsl, BinaryData::gridfloor_frag_glsl, "gridFloorShader");
     gridFloor.emplace(
         GLMesh::quad(juce::Colour::fromHSV(0.1f, 0.75f, 1.0f, 1.0f)),  
         gridFloorShader,
         rotationTranslationScale({}, {}, 3.0f)
     );  
 
-    ballShader = loadShader(openGLContext, BinaryData::billboard_vert_glsl, BinaryData::ball_frag_glsl, "ballShader");  
+    if (!ballShader) ballShader = loadShader(openGLContext, BinaryData::billboard_vert_glsl, BinaryData::ball_frag_glsl, "ballShader");
     ball.emplace(
         GLMesh::quad(juce::Colours::white),  
         ballShader,
         rotationTranslationScale({}, {}, 0.125f)
     );
 
-    icosphereShader = loadShader(openGLContext, BinaryData::standard_vert_glsl, BinaryData::icosphere_frag_glsl, "meshDebugShader");
+    if (!icosphereShader) icosphereShader = loadShader(openGLContext, BinaryData::standard_vert_glsl, BinaryData::icosphere_frag_glsl, "meshDebugShader");
 	icosphere.emplace(
 		GLMesh::icosphere(1, juce::Colours::white),
 		icosphereShader,
         rotationTranslationScale({}, {}, ICOSPHERE_SCALE)
 	);
 
-    downsampleShader      = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::downsample_frag_glsl, "downsampleShader");  
-    cinematicShader       = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::cinematic_frag_glsl, "cinematicShader");  
-    gaussianShader        = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::gaussian_frag_glsl, "gaussianShader");  
-    bloomAccumulateShader = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::bloomAccumulate_frag_glsl, "bloomAccumulateShader");
+	if (!downsampleShader     ) downsampleShader      = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::downsample_frag_glsl, "downsampleShader");
+    if (!cinematicShader      ) cinematicShader       = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::cinematic_frag_glsl, "cinematicShader");  
+    if (!gaussianShader       ) gaussianShader        = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::gaussian_frag_glsl, "gaussianShader");  
+    if (!bloomAccumulateShader) bloomAccumulateShader = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::bloomAccumulate_frag_glsl, "bloomAccumulateShader");
     postprocess.emplace(  
         downsampleShader,  
         cinematicShader,  
@@ -176,14 +189,11 @@ void ViewportComponent::resized() {
 }
 
 void ViewportComponent::shutdown() {
-    // May be called multiple times by the parent
+	// Don't reset shaders, only buffer-holding objects
     gridFloor.reset();
-    gridFloorShader.reset();
     ball.reset();
-    ballShader.reset();
+	icosphere.reset();
     postprocess.reset();
-    downsampleShader.reset();
-    cinematicShader.reset();
 }
 
 void ViewportComponent::mouseMove(juce::MouseEvent const &event) {

@@ -720,18 +720,8 @@ struct ViewportComponent: juce::OpenGLAppComponent {
     ViewportComponent(ViewportComponent const &) = delete;
     ViewportComponent &operator=(ViewportComponent const &) = delete;
 
-    ViewportComponent(SaunaControls const &pluginState) :
-		pluginState{ pluginState },
-        juce::OpenGLAppComponent{},
-        gridFloorShader{ nullptr },
-        startTime{ juce::Time::getCurrentTime() },
-		lastUpdateTime{ startTime },
-        vBlankTimer{ this, [this](){ update(); } }
-    {};
-
-    ~ViewportComponent() {
-        shutdownOpenGL();
-    }
+    ViewportComponent(SaunaControls const& pluginState);
+	~ViewportComponent();
 
     void update();
 
@@ -754,7 +744,6 @@ private:
 
     juce::OpenGLContext openGLContext;
     juce::Rectangle<int> componentBounds, renderBounds;
-    std::optional<PostProcess> postprocess;
 
     std::shared_ptr<juce::OpenGLShaderProgram>
         gridFloorShader,
@@ -765,6 +754,7 @@ private:
         bloomAccumulateShader,
         icosphereShader;
 
+    std::optional<PostProcess> postprocess;
     std::optional<GLMeshObject>
         gridFloor,
         ball,
