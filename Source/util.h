@@ -204,13 +204,16 @@ static inline Data expEase(Data const &current, Data const &target, float easing
     return target + (current - target) * std::exp(-easing * delta);
 }
 
-static std::shared_ptr<juce::OpenGLShaderProgram> loadShader(
+static bool tryLoadShader(
+	std::shared_ptr<juce::OpenGLShaderProgram> &shader,
     juce::OpenGLContext &context,
     char const *vertexSource,
     char const *fragmentSource,
     char const *shaderName
 ) {
-    auto shader = std::make_shared<juce::OpenGLShaderProgram>(context);
+    if (shader) return false;
+    
+    shader = std::make_shared<juce::OpenGLShaderProgram>(context);
 
     if (!shader->addVertexShader(vertexSource)) {
         DBG("\n\nVertex Shader Error in " << shaderName << ":\n" << shader->getLastError().toStdString());
@@ -225,5 +228,5 @@ static std::shared_ptr<juce::OpenGLShaderProgram> loadShader(
         jassertfalse;
     }
 
-    return shader;
+    return true;
 }

@@ -94,7 +94,9 @@ struct GLMeshUniforms {
     juce::OpenGLShaderProgram::Uniform
         modelMatrix,
         viewMatrix,
-        projectionMatrix;
+        projectionMatrix,
+        time,
+        texture0;
 
     GLMeshUniforms() = delete;
     GLMeshUniforms(GLMeshUniforms const &) = delete;
@@ -104,7 +106,9 @@ struct GLMeshUniforms {
     GLMeshUniforms(juce::OpenGLShaderProgram const &shader) :
         modelMatrix{ shader, "modelMatrix" },
         viewMatrix{ shader, "viewMatrix" },
-        projectionMatrix{ shader, "projectionMatrix" }
+        projectionMatrix{ shader, "projectionMatrix" },
+		time{ shader, "time" },
+		texture0{ shader, "texture0" }
     {}
 };
 
@@ -176,6 +180,7 @@ struct FaceCollector {
 		return result;
 	}
 };
+
 
 struct GLMesh {
     bool owning;
@@ -363,12 +368,74 @@ struct GLMesh {
 };
 
 
+struct GLImageTexture {
+    bool owning{ true };
+    GLuint texture;
+    GLuint textureFormat;
+
+    GLImageTexture(GLImageTexture const&) = delete;
+    GLImageTexture& operator=(GLImageTexture const&) = delete;
+    GLImageTexture(GLImageTexture&& other) noexcept {
+        this->~GLImageTexture();
+        owning = other.owning;
+        texture = other.texture;
+        other.owning = false;
+    }
+
+    GLImageTexture(juce::Image source, GLuint textureFormat) :
+        textureFormat{ textureFormat }
+    {
+        using namespace juce::gl;
+		jassert(source.isValid());
+
+        glGenTextures(1, &texture);
+        glBindTexture(GL_TEXTURE_2D, texture);
+
+        static const std::unordered_map<juce::Image::PixelFormat, GLuint> formatMap{
+            { juce::Image::ARGB, GL_RGBA },
+            { juce::Image::RGB, GL_RGB },
+            { juce::Image::SingleChannel, GL_RED }
+        };
+        GLuint sourceFormat;
+        try {
+            sourceFormat = formatMap.at(source.getFormat());
+        } catch (std::out_of_range) {
+            DBG("Unsupported source texture format: " << source.getFormat());
+            jassertfalse;
+        }
+
+        DBG("Creating texture from format " << (int) sourceFormat << " with internal representation " << (int) textureFormat);
+        glTexImage2D(
+            GL_TEXTURE_2D, 0, textureFormat,
+            source.getBounds().getWidth(), source.getBounds().getHeight(), 0,
+            sourceFormat, GL_UNSIGNED_BYTE, 
+            juce::Image::BitmapData{ source, juce::Image::BitmapData::ReadWriteMode::readOnly }.data
+        );
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    }
+
+    void bind(GLuint textureSlot) const {
+        using namespace juce::gl;
+        glActiveTexture(GL_TEXTURE0 + textureSlot);
+        glBindTexture(GL_TEXTURE_2D, texture);
+    }
+
+    ~GLImageTexture() {
+        if (owning) juce::gl::glDeleteTextures(1, &texture);
+    }
+};
+
+
 struct GLMeshObject {
     GLMesh mesh;
     std::shared_ptr<juce::OpenGLShaderProgram> shader;
     GLVertexAttributes attribs;
     GLMeshUniforms uniforms;
     juce::Matrix3D<float> modelMatrix;
+	GLImageTexture const *texture0;
 
     GLMeshObject() = delete;
     GLMeshObject(GLMeshObject const &) = delete;
@@ -377,19 +444,20 @@ struct GLMeshObject {
     GLMeshObject(
         GLMesh &&handle,
         std::shared_ptr<juce::OpenGLShaderProgram> &shader,
-        juce::Matrix3D<float> modelMatrix = {}
+        juce::Matrix3D<float> modelMatrix = {},
+		GLImageTexture const *texture0 = nullptr
     ) noexcept : 
         mesh{ std::move(handle) },
         attribs{ *shader },
         uniforms{ *shader },
         shader{ shader },
-        modelMatrix{ modelMatrix }
+        modelMatrix{ modelMatrix },
+		texture0{ texture0 }
     {}
     GLMeshObject(GLMeshObject &&) noexcept = default;
     GLMeshObject &operator=(GLMeshObject &&) noexcept = default;
     ~GLMeshObject() = default;
 };
-
 
 struct GLBackBuffer {
     bool owning{ true };
@@ -741,6 +809,7 @@ private:
     juce::VBlankAttachment vBlankTimer;
     juce::Time startTime;
     juce::Time lastUpdateTime;
+    float secondsElapsed;
 
     juce::OpenGLContext openGLContext;
     juce::Rectangle<int> componentBounds, renderBounds;
@@ -753,6 +822,8 @@ private:
         gaussianShader,
         bloomAccumulateShader,
         icosphereShader;
+
+    std::optional<GLImageTexture> perlin;
 
     std::optional<PostProcess> postprocess;
     std::optional<GLMeshObject>

@@ -25,31 +25,37 @@ void ViewportComponent::initialise() {
 
     recomputeViewportSize();
 
-    if (!gridFloorShader) gridFloorShader = loadShader(openGLContext, BinaryData::standard_vert_glsl, BinaryData::gridfloor_frag_glsl, "gridFloorShader");
+	perlin.emplace(
+        juce::ImageCache::getFromMemory(BinaryData::perlin_jpg, BinaryData::perlin_jpgSize),
+        juce::gl::GL_RED
+    );
+
+    tryLoadShader(gridFloorShader, openGLContext, BinaryData::standard_vert_glsl, BinaryData::gridfloor_frag_glsl, "gridFloorShader");
     gridFloor.emplace(
         GLMesh::quad(juce::Colour::fromHSV(0.1f, 0.75f, 1.0f, 1.0f)),  
         gridFloorShader,
         rotationTranslationScale({}, {}, 3.0f)
     );  
 
-    if (!ballShader) ballShader = loadShader(openGLContext, BinaryData::billboard_vert_glsl, BinaryData::ball_frag_glsl, "ballShader");
+    tryLoadShader(ballShader, openGLContext, BinaryData::billboard_vert_glsl, BinaryData::ball_frag_glsl, "ballShader");
     ball.emplace(
         GLMesh::quad(juce::Colours::white),  
         ballShader,
         rotationTranslationScale({}, {}, 0.125f)
     );
 
-    if (!icosphereShader) icosphereShader = loadShader(openGLContext, BinaryData::standard_vert_glsl, BinaryData::icosphere_frag_glsl, "meshDebugShader");
+    tryLoadShader(icosphereShader, openGLContext, BinaryData::standard_vert_glsl, BinaryData::icosphere_frag_glsl, "meshDebugShader");
 	icosphere.emplace(
 		GLMesh::icosphere(1, juce::Colours::white),
 		icosphereShader,
-        rotationTranslationScale({}, {}, ICOSPHERE_SCALE)
+        rotationTranslationScale({}, {}, ICOSPHERE_SCALE),
+        &perlin.value()
 	);
 
-	if (!downsampleShader     ) downsampleShader      = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::downsample_frag_glsl, "downsampleShader");
-    if (!cinematicShader      ) cinematicShader       = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::cinematic_frag_glsl, "cinematicShader");  
-    if (!gaussianShader       ) gaussianShader        = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::gaussian_frag_glsl, "gaussianShader");  
-    if (!bloomAccumulateShader) bloomAccumulateShader = loadShader(openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::bloomAccumulate_frag_glsl, "bloomAccumulateShader");
+	tryLoadShader(downsampleShader,      openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::downsample_frag_glsl, "downsampleShader");
+    tryLoadShader(cinematicShader,       openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::cinematic_frag_glsl, "cinematicShader");  
+    tryLoadShader(gaussianShader,        openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::gaussian_frag_glsl, "gaussianShader");  
+    tryLoadShader(bloomAccumulateShader, openGLContext, BinaryData::postprocess_vert_glsl, BinaryData::bloomAccumulate_frag_glsl, "bloomAccumulateShader");
     postprocess.emplace(  
         downsampleShader,  
         cinematicShader,  
@@ -74,7 +80,7 @@ void ViewportComponent::update() {
     juce::Time now = juce::Time::getCurrentTime();
 
     float delta = static_cast<float>((now - lastUpdateTime).inSeconds());
-    float elapsed = static_cast<float>((now - startTime).inSeconds());
+    secondsElapsed = static_cast<float>((now - startTime).inSeconds());
 
     if (
         (smoothMouse - INITIAL_MOUSE).getDistanceFromOrigin() > 0.0001
@@ -86,7 +92,7 @@ void ViewportComponent::update() {
 
     if (icosphere) {
         icosphere->modelMatrix = rotationTranslationScale(
-            Vec3{ 0.0f, 0.0f, elapsed * 1.0f },
+            Vec3{ 0.0f, 0.0f, secondsElapsed * 1.0f },
             pluginState.getLastPosition(),
             ICOSPHERE_SCALE
         );
@@ -130,7 +136,7 @@ void ViewportComponent::render() {
         return radius * pivot * lift;
     }() };
 
-    const auto draw{ [&projectionMatrix, &viewMatrix](GLMeshObject const &mesh) {
+    const auto draw{ [this, &projectionMatrix, &viewMatrix](GLMeshObject const &mesh) {
         mesh.shader->use();
 
         if (mesh.uniforms.projectionMatrix.uniformID >= 0) {
@@ -142,6 +148,13 @@ void ViewportComponent::render() {
         if (mesh.uniforms.modelMatrix.uniformID >= 0) {
             mesh.uniforms.modelMatrix.setMatrix4(mesh.modelMatrix.mat, 1, false);
         }
+		if (mesh.texture0 && mesh.uniforms.texture0.uniformID >= 0) {
+			mesh.uniforms.texture0.set(0);
+            mesh.texture0->bind(0);
+		}
+		if (mesh.uniforms.time.uniformID >= 0) {
+			mesh.uniforms.time.set(secondsElapsed);
+		}
 
         glBindBuffer(GL_ARRAY_BUFFER, mesh.mesh.vertexBuffer);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.mesh.indexBuffer);
@@ -194,6 +207,7 @@ void ViewportComponent::shutdown() {
     ball.reset();
 	icosphere.reset();
     postprocess.reset();
+    perlin.reset();
 }
 
 void ViewportComponent::mouseMove(juce::MouseEvent const &event) {

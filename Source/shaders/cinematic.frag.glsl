@@ -9,7 +9,7 @@ out vec4 fragColor;
 const float EXPOSURE = 10.0;
 const vec3 LIFT = vec3(0.02);
 const float WHITE_LEVEL = 11.2;
-const float ABBERATION = 1.0 / 256.0;
+const float ABBERATION = 1.0 / 320.0;
 const float DISTORTION = 0.3;
 const float VIGNETTE_STRENGTH = 0.5;
 

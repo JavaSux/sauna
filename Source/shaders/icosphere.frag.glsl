@@ -3,54 +3,66 @@
 in float vScreenFacing;
 in vec4 vColor;
 in vec2 vTexCoord;
+in vec3 vWorldPosition;
+in vec3 vPosition;
+
+uniform sampler2D texture0;
+uniform float time;
 
 out vec4 fragColor;
 
-const float SMOOTH_STRENGTH = 1.5;
 
-const float BASE_BRIGHTNESS = 0.5;
-const float WIREFRAME_BRIGHTNESS = 3;
+vec3 base_color() {
+    const vec3 BASE_COLOR = vec3(0.2, 0.5, 0.35);
+    const float LIFT = 0.01;
 
-const vec3 BASE_COLOR = vec3(0.4, 1.0, 0.7);
-const vec3 WIREFRAME_COLOR = vec3(1);
-
-float pixelPitch(float axis) {
-    // return length(vec2(dFdx(axis), dFdy(axis)));
-    return fwidth(axis);
+    float inv_facing = clamp(1.0 - vScreenFacing, 0.0, 1.0);
+    float falloff = inv_facing * inv_facing + LIFT;
+    return BASE_COLOR * falloff;
 }
 
+
 float softThreshold(float value, float threshold) {
-    float width = pixelPitch(value) * SMOOTH_STRENGTH;
-    float gradient = (threshold + (width / 2.0) - value) / width;
+    const float SMOOTH_STRENGTH = 1.5;
+    const float SMOOTH_DILATE = 0.25;
+
+    float width = fwidth(value) * SMOOTH_STRENGTH;
+    float gradient = (threshold + (width * SMOOTH_DILATE) - value) / width;
     return clamp(gradient, 0.0, 1.0);
 }
 
-float wireframe(float thickness) {
+float wireframe_mask(float thickness) {
     float gradient = min(
         min(vTexCoord.x, vTexCoord.y), 
         1.0 - (vTexCoord.x + vTexCoord.y)
     );
-    float d = softThreshold(gradient, thickness);
 
-    return d;
+    return softThreshold(gradient, thickness);
 }
 
-float oblique() {
-    float inv_facing = 1.0 - vScreenFacing;
-    return inv_facing * inv_facing;
+vec3 sparks() {
+    const vec3 COLOR = vec3(1.0, 1.0, 2.0);
+    const float BRIGHTNESS = 64.0;
+    const float LIFT = 0.0025;
+    const float THICKNESS = 1.0 / 48.0;
+
+    const vec2 NOISE_SCALE = vec2(30.0, 64.0);
+    const float NOISE_SPEED = 1.0;
+
+    vec2 noise_coord = vPosition.xz / NOISE_SCALE + vec2(
+        time * NOISE_SPEED / -129.0, // NPOT to maximize randomness
+        time * NOISE_SPEED / -16.0
+    );
+    float noise = smoothstep(0.6, 0.9, texture(texture0, noise_coord).r);
+    float intensity = pow(noise, 2.0) * BRIGHTNESS + LIFT;
+
+    return COLOR * intensity * wireframe_mask(THICKNESS);
 }
+
 
 void main() {
-    float falloff = oblique();
-
-    vec3 base_color = BASE_COLOR * BASE_BRIGHTNESS * falloff;
-    vec3 wireframe_color = WIREFRAME_COLOR 
-        * WIREFRAME_BRIGHTNESS 
-        * wireframe(1.0 / 48.0) 
-        * (1.0 - falloff);
-
     fragColor = vec4(
-        base_color + wireframe_color, 
+        base_color() + sparks(),
         vColor.a
     );
 }   

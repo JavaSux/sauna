@@ -8,7 +8,10 @@ in float vScreenFacing;
 out vec4 fragColor;
 
 const float BRIGHTNESS = 1.5;
+
 const float SMOOTH_STRENGTH = 1.5;
+const float SMOOTH_DILATE = 0.5;
+
 const float LINE_WIDTH = 0.03;
 const float DOT_RADIUS = 0.065;
 
@@ -23,7 +26,7 @@ float pixelPitch(float axis) {
 
 float softThreshold(float value, float threshold) {
     float width = pixelPitch(value) * SMOOTH_STRENGTH;
-    float gradient = (threshold + (width / 2.0) - value) / width;
+    float gradient = (threshold + (width * SMOOTH_DILATE) - value) / width;
     return clamp(gradient, 0.0, 1.0);
 }
 

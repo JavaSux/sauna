@@ -12,12 +12,14 @@ uniform mat4 modelMatrix;
 out vec4 vColor;
 out vec2 vTexCoord;
 out vec3 vWorldPosition;
+out vec3 vPosition;
 // out vec3 vWorldNormal;
 out float vScreenFacing;
 
 void main() {
     vColor = aColor;
     vTexCoord = aTexCoord;
+    vPosition = aPosition;
     vWorldPosition = (modelMatrix * vec4(aPosition, 1.0)).xyz;
     // mat3 worldNormalMatrix = mat3(transpose(inverse(modelMatrix)));
     // vWorldNormal = normalize(worldNormalMatrix * aNormal);
