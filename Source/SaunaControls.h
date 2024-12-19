@@ -11,7 +11,8 @@ struct PathNode {
 	float nextDuration;
 };
 
-enum struct SaunaMode {
+const int SAUNA_MODE_SIZE = 3;
+enum struct SaunaMode: int {
 	Static,
 	Orbit,
 	Path,
@@ -24,10 +25,8 @@ struct SaunaControls {
 	~SaunaControls() = default;
 
 	Vec3 updatePosition(float time);
-	Vec3 getLastPosition() const { return lastPosition; }
-	float getMinDistance() const;
+	Vec3 getLastPosition() const { return lastPosition.load(); }
 
-private:
 	// Global params
 	juce::AudioParameterChoice *mode;
 	juce::AudioParameterFloat *speed;
@@ -50,6 +49,7 @@ private:
 	std::vector<PathNode> nodes{};
 	unsigned int currentNode{};
 
-	Vec3 lastPosition{};
+private:
+	std::atomic<Vec3> lastPosition{}; // std::atomic falls back to Mutex for large types
 	Vec3 orbit(float time) const;
 };

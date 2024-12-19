@@ -24,7 +24,7 @@ vec3 base_color() {
 
 float softThreshold(float value, float threshold) {
     const float SMOOTH_STRENGTH = 1.5;
-    const float SMOOTH_DILATE = 0.25;
+    const float SMOOTH_DILATE = 0.0;
 
     float width = fwidth(value) * SMOOTH_STRENGTH;
     float gradient = (threshold + (width * SMOOTH_DILATE) - value) / width;
@@ -44,7 +44,7 @@ vec3 sparks() {
     const vec3 COLOR = vec3(1.0, 1.0, 2.0);
     const float BRIGHTNESS = 64.0;
     const float LIFT = 0.0025;
-    const float THICKNESS = 1.0 / 48.0;
+    const float THICKNESS = 1.0 / 32.0;
 
     const vec2 NOISE_SCALE = vec2(30.0, 64.0);
     const float NOISE_SPEED = 1.0;

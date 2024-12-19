@@ -34,12 +34,12 @@ struct SaunaProcessor: juce::AudioProcessor {
     void getStateInformation(juce::MemoryBlock& destData) override;
     void setStateInformation(const void *data, int sizeInBytes) override;
 
-	SaunaControls const &getPluginState() const { return pluginState; }
+	SaunaControls &getControls() { return controls; }
 
 private:
     IPLContext steam_audio_context{};
     std::optional<Spatializer> spatializer{};
-    SaunaControls pluginState;
+    SaunaControls controls;
 
     JUCE_LEAK_DETECTOR(SaunaProcessor)
 };

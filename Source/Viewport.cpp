@@ -4,7 +4,7 @@
 const juce::Point<float> ViewportComponent::INITIAL_MOUSE{ 0.5f, 0.6f };
 const juce::Colour ViewportComponent::CLEAR_COLOR = juce::Colours::black;
 const double ViewportComponent::MOUSE_DELAY = 0.4;
-const float ICOSPHERE_SCALE = 0.2;
+const float ICOSPHERE_SCALE = 0.2f;
 
 ViewportComponent::ViewportComponent(SaunaControls const &pluginState) :
     pluginState{ pluginState },
@@ -86,7 +86,6 @@ void ViewportComponent::update() {
         (smoothMouse - INITIAL_MOUSE).getDistanceFromOrigin() > 0.0001
         || mouseEntered && (now - *mouseEntered).inSeconds() > MOUSE_DELAY
     ) {
-        
         smoothMouse = expEase(smoothMouse, mousePosition, 16.0, delta);
     }
 
@@ -96,6 +95,9 @@ void ViewportComponent::update() {
             pluginState.getLastPosition(),
             ICOSPHERE_SCALE
         );
+
+        auto lastPosition = pluginState.getLastPosition();
+		DBG("Icosphere position: " << lastPosition.x << ", " << lastPosition.y << ", " << lastPosition.z);
     }
 
     lastUpdateTime = now;

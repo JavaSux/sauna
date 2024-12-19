@@ -39,13 +39,96 @@ struct ViewportFrameComponent: juce::Component {
     }
 };
 
+
+struct CPStaticControls: juce::Component {
+    SaunaControls& controls;
+
+    juce::Slider positionSliders[3];
+
+    CPStaticControls(SaunaControls& controls);
+    CPStaticControls(CPStaticControls const&) = delete;
+    CPStaticControls& operator=(CPStaticControls const&) = delete;
+    ~CPStaticControls() override = default;
+
+    void paint(juce::Graphics&) override;
+    void resized() override;
+};
+
+
+struct CPOrbitControls: juce::Component {
+	SaunaControls& controls;
+
+	juce::Slider centerSliders[3], axisSliders[3];
+	juce::Slider radiusSlider, stretchSlider, rotationSlider;
+
+	CPOrbitControls(SaunaControls& controls);
+	CPOrbitControls(CPOrbitControls const&) = delete;
+	CPOrbitControls& operator=(CPOrbitControls const&) = delete;
+	~CPOrbitControls() override = default;
+
+	void paint(juce::Graphics&) override;
+	void resized() override;
+};
+
+
+struct CPPathControls: juce::Component {
+	SaunaControls& controls;
+
+	CPPathControls(SaunaControls& controls);
+	CPPathControls(CPPathControls const&) = delete;
+	CPPathControls& operator=(CPPathControls const&) = delete;
+	~CPPathControls() override = default;
+
+	void paint(juce::Graphics&) override;
+	void resized() override;
+};
+
+
+struct CPModeControls: juce::Component {
+    SaunaControls &controls;
+
+    CPOrbitControls orbitControls;
+    CPStaticControls staticControls;
+    CPPathControls pathControls;
+
+    CPModeControls(SaunaControls& controls);
+    CPModeControls(CPModeControls const&) = delete;
+    CPModeControls &operator=(CPModeControls const&) = delete;
+    ~CPModeControls() override = default;
+
+    void paint(juce::Graphics&) override;
+    void resized() override;
+};
+
+
+struct CPCommonControls: juce::Component {
+	SaunaControls &controls;
+	CPModeControls &modeControls;
+
+    juce::ComboBox modeComboBox;
+    juce::Slider speedSlider, phaseSlider;
+    juce::ToggleButton tempoSyncButton;
+
+    CPCommonControls() = delete;
+	CPCommonControls(SaunaControls& controls, CPModeControls &modeControls);
+	CPCommonControls(CPCommonControls const&) = delete;
+	CPCommonControls& operator=(CPCommonControls const&) = delete;
+	~CPCommonControls() override = default;
+
+	void paint(juce::Graphics&) override;
+	void resized() override;
+};
+
+
 struct ControlPanelComponent: juce::Component {
-    SaunaProcessor &saunaProcessor;
-    juce::Component leftPanel, rightPanel;
+    SaunaControls &controls;
     juce::DropShadow dropShadow;
 
+	CPCommonControls commonControls;
+    CPModeControls modeControls;
+
     ControlPanelComponent() = delete;
-    ControlPanelComponent(SaunaProcessor &p);
+    ControlPanelComponent(SaunaControls &controls);
     ControlPanelComponent(ControlPanelComponent const &) = delete;
     ControlPanelComponent &operator=(ControlPanelComponent const &) = delete;
     ~ControlPanelComponent() override = default;

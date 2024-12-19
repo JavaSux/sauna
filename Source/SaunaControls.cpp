@@ -19,7 +19,7 @@ static std::array<juce::AudioParameterFloat *, 3> vectorParam(
 SaunaControls::SaunaControls(juce::AudioProcessor &processor) :
 	speed{ new juce::AudioParameterFloat("speed", "Speed", 0.01f, 10.0f, 0.5f) },
 	phase{ new juce::AudioParameterFloat("phase", "Phase", 0.0f, float{ pi * 2.0 }, 0.0f) },
-	mode{ new juce::AudioParameterChoice("mode", "Mode", { "Static", "Orbit", "Path" }, 1) },
+	mode{ new juce::AudioParameterChoice("mode", "Mode", { "Static", "Orbit", "Path" }, 0) },
 	minDistance{ new juce::AudioParameterFloat("minDistance", "Min. Distance", 0.1f, 10.0f, 0.2f) },
 	tempoSync{ new juce::AudioParameterBool("tempoSync", "Tempo sync", true) },
 
@@ -64,29 +64,27 @@ SaunaControls::SaunaControls(juce::AudioProcessor &processor) :
 
 Vec3 SaunaControls::updatePosition(float time) {
 	auto index = mode->getIndex();
+	Vec3 value;
 
 	switch (static_cast<SaunaMode>(index)) {
 	case SaunaMode::Static:
-		lastPosition = Vec3{ staticPosition };
+		value = { staticPosition };
 		break;
 
 	case SaunaMode::Orbit:
-		lastPosition = orbit(time);
+		value = { orbit(time) };
 		break;
 
 	case SaunaMode::Path:
-		lastPosition = Vec3{};
+		value = {};
 		break;
 
 	default:
 		throw std::runtime_error{ std::format("Undefined mode {}", index) };
 	}
 
-	return lastPosition;
-}
-
-float SaunaControls::getMinDistance() const {
-	return *minDistance;
+	lastPosition.store(value);
+	return value;
 }
 
 Vec3 SaunaControls::orbit(float time) const {

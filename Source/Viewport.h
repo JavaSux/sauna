@@ -396,7 +396,7 @@ struct GLImageTexture {
             { juce::Image::RGB, GL_RGB },
             { juce::Image::SingleChannel, GL_RED }
         };
-        GLuint sourceFormat;
+        GLuint sourceFormat{ 0 };
         try {
             sourceFormat = formatMap.at(source.getFormat());
         } catch (std::out_of_range) {

@@ -21,9 +21,9 @@ struct Vec3 {
         z{  steam.y }
     {}
     Vec3(std::span<juce::AudioParameterFloat const * const, 3> params) :
-        x{ *params[0] },
-        y{ *params[1] },
-        z{ *params[2] }
+        x{ params[0]->get() },
+        y{ params[1]->get() },
+        z{ params[2]->get() }
     {}
 
     constexpr static Vec3 origin() { return Vec3{}; }

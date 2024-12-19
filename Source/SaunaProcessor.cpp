@@ -20,7 +20,7 @@ SaunaProcessor::SaunaProcessor() :
             .withInput ("Input",  juce::AudioChannelSet::stereo(), true)
             .withOutput("Output", juce::AudioChannelSet::stereo(), true)
     },
-    pluginState{ *this }
+    controls{ *this }
 {
     IPLContextSettings contextSettings{
         .version = STEAMAUDIO_VERSION,
@@ -90,10 +90,10 @@ void SaunaProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::MidiBu
         auto playheadPosition = playHead.load()->getPosition();
         double time = playheadPosition.hasValue() ? playheadPosition->getTimeInSeconds().orFallback(0.0) : 0.0;
 
-        auto position = pluginState.updatePosition(static_cast<float>(time));
+        auto position = controls.updatePosition(static_cast<float>(time));
 
         spatializer.value()
-            .setParams(position, pluginState.getMinDistance())
+            .setParams(position, controls.minDistance->get())
             .processBlock(buffer, getMainBusNumInputChannels());
     } catch (std::exception e) {
         DBG(e.what());
